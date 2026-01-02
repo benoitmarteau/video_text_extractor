@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video OCR Transcript Extractor</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #8892b0;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .upload-zone input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            color: #8892b0;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        select, input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 0.75rem;
+            color: #e0e0e0;
+            font-size: 1rem;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: #000;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-container {
+            display: none;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #8892b0;
+        }
+
+        .progress-details {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .progress-percentage {
+            color: #00d4ff;
+            font-weight: 600;
+            font-size: 1.2rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .frame-counter {
+            color: #00ff88;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid #00d4ff;
+            color: #00d4ff;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .transcript-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1.5rem;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .entry {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .entry:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .speaker {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .timestamp {
+            color: #8892b0;
+            font-size: 0.85rem;
+        }
+
+        .message {
+            margin-top: 0.25rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(0, 212, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #8892b0;
+        }
+
+        .error {
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: #ff5252;
+            padding: 1rem;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #00ff88;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Video OCR Transcript Extractor</h1>
+            <p class="subtitle">Extract and deduplicate scrolling text from screen recordings</p>
+        </header>
+
+        <div class="card">
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-icon">📹</div>
+                <p>Drop your video file here or click to browse</p>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+                    Supports MP4, MOV, AVI, MKV, WebM
+                </p>
+                <input type="file" id="fileInput" accept="video/*">
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display: none;">
+                <span>📎</span>
+                <span id="fileName"></span>
+            </div>
+
+            <div class="options-grid">
+                <div class="form-group">
+                    <label for="engine">OCR Engine</label>
+                    <select id="engine">
+                        <option value="easyocr">EasyOCR (Recommended)</option>
+                        <option value="paddleocr">PaddleOCR</option>
+                        <option value="tesseract">Tesseract</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="fps">Frames per Second</label>
+                    <select id="fps">
+                        <option value="1">1 FPS (Faster)</option>
+                        <option value="2" selected>2 FPS (Balanced)</option>
+                        <option value="3">3 FPS (More Detail)</option>
+                        <option value="5">5 FPS (Maximum)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="language">Language</label>
+                    <select id="language">
+                        <option value="en">English</option>
+                        <option value="ch">Chinese</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="es">Spanish</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" id="processBtn" disabled>Extract Transcript</button>
+
+            <div class="error" id="errorMsg"></div>
+        </div>
+
+        <div class="card progress-container" id="progressContainer">
+            <h3 style="margin-bottom: 1rem;">Processing Video</h3>
+            <div class="progress-percentage" id="progressPercentage">0%</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p class="progress-text" id="progressText">Starting...</p>
+            <div class="progress-details">
+                <span id="frameCounter" class="frame-counter"></span>
+                <span id="progressPhase"></span>
+            </div>
+        </div>
+
+        <div class="card results" id="resultsContainer">
+            <h3 style="margin-bottom: 1rem;">Extraction Results</h3>
+
+            <div class="stats" id="stats"></div>
+
+            <div class="result-actions">
+                <button class="btn btn-secondary" onclick="downloadResult('json')">Download JSON</button>
+                <button class="btn btn-secondary" onclick="downloadResult('markdown')">Download Markdown</button>
+                <button class="btn btn-secondary" onclick="downloadResult('text')">Download Text</button>
+            </div>
+
+            <div class="transcript-display" id="transcriptDisplay"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let selectedFile = null;
+        let statusPollInterval = null;
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const processBtn = document.getElementById('processBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const frameCounter = document.getElementById('frameCounter');
+        const progressPhase = document.getElementById('progressPhase');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const transcriptDisplay = document.getElementById('transcriptDisplay');
+        const statsContainer = document.getElementById('stats');
+        const errorMsg = document.getElementById('errorMsg');
+
+        // Drag and drop handlers
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        uploadZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'flex';
+            processBtn.disabled = false;
+            errorMsg.classList.remove('active');
+        }
+
+        function updateProgress(progress, message, totalFrames, currentFrame) {
+            progressFill.style.width = `${progress}%`;
+            progressPercentage.textContent = `${progress}%`;
+            progressText.textContent = message || 'Processing...';
+
+            if (totalFrames > 0 && currentFrame > 0) {
+                frameCounter.textContent = `Frame ${currentFrame} / ${totalFrames}`;
+            } else {
+                frameCounter.textContent = '';
+            }
+
+            // Determine phase based on progress
+            let phase = '';
+            if (progress < 5) phase = 'Initializing';
+            else if (progress < 15) phase = 'Extracting frames';
+            else if (progress < 85) phase = 'OCR processing';
+            else if (progress < 90) phase = 'Deduplicating';
+            else if (progress < 95) phase = 'Parsing transcript';
+            else if (progress < 100) phase = 'Generating output';
+            else phase = 'Complete';
+            progressPhase.textContent = phase;
+        }
+
+        async function pollStatus() {
+            if (!currentJobId) return;
+
+            try {
+                const response = await fetch(`/api/status/${currentJobId}`);
+                if (response.ok) {
+                    const status = await response.json();
+                    updateProgress(
+                        status.progress,
+                        status.progress_message,
+                        status.total_frames,
+                        status.current_frame
+                    );
+                }
+            } catch (e) {
+                console.error('Status poll error:', e);
+            }
+        }
+
+        function startPolling() {
+            // Poll every 500ms for updates
+            statusPollInterval = setInterval(pollStatus, 500);
+        }
+
+        function stopPolling() {
+            if (statusPollInterval) {
+                clearInterval(statusPollInterval);
+                statusPollInterval = null;
+            }
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            processBtn.disabled = true;
+            progressContainer.classList.add('active');
+            resultsContainer.classList.remove('active');
+            errorMsg.classList.remove('active');
+
+            // Reset progress display
+            updateProgress(0, 'Uploading video...', 0, 0);
+
+            try {
+                // Upload video
+                const formData = new FormData();
+                formData.append('video', selectedFile);
+                formData.append('engine', document.getElementById('engine').value);
+                formData.append('fps', document.getElementById('fps').value);
+                formData.append('language', document.getElementById('language').value);
+
+                const uploadResponse = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('Upload failed');
+                }
+
+                const uploadData = await uploadResponse.json();
+                currentJobId = uploadData.job_id;
+
+                // Start polling for status updates
+                startPolling();
+
+                // Start processing (this will block until complete)
+                updateProgress(1, 'Starting processing...', 0, 0);
+
+                const processResponse = await fetch(`/api/process/${currentJobId}`, {
+                    method: 'POST'
+                });
+
+                // Stop polling when processing completes
+                stopPolling();
+
+                if (!processResponse.ok) {
+                    const error = await processResponse.json();
+                    throw new Error(error.error || 'Processing failed');
+                }
+
+                const result = await processResponse.json();
+
+                // Display results
+                displayResults(result.result);
+
+            } catch (error) {
+                stopPolling();
+                errorMsg.textContent = error.message;
+                errorMsg.classList.add('active');
+                progressContainer.classList.remove('active');
+            }
+
+            processBtn.disabled = false;
+        });
+
+        function displayResults(result) {
+            progressContainer.classList.remove('active');
+            resultsContainer.classList.add('active');
+
+            // Display stats
+            const stats = result.statistics;
+            statsContainer.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${stats.total_speakers}</div>
+                    <div class="stat-label">Speakers</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${stats.total_messages}</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${stats.word_count}</div>
+                    <div class="stat-label">Words</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${(stats.deduplication_ratio * 100).toFixed(0)}%</div>
+                    <div class="stat-label">Unique Content</div>
+                </div>
+            `;
+
+            // Display transcript
+            let html = '';
+            if (result.transcript && result.transcript.length > 0) {
+                for (const entry of result.transcript) {
+                    html += `
+                        <div class="entry">
+                            <span class="speaker">${entry.speaker || 'Unknown'}</span>
+                            <span class="timestamp">(${entry.timestamp})</span>
+                            <div class="message">${entry.text}</div>
+                        </div>
+                    `;
+                }
+            } else if (result.raw_text && result.raw_text.trim()) {
+                // Fallback to raw OCR text if no structured transcript
+                html = `
+                    <div class="entry">
+                        <p style="color: #8892b0; margin-bottom: 1rem;">
+                            <em>No structured transcript detected. Showing raw OCR text:</em>
+                        </p>
+                        <div class="message" style="white-space: pre-wrap;">${result.raw_text}</div>
+                    </div>
+                `;
+            } else {
+                html = '<p>No text content found in video.</p>';
+            }
+            transcriptDisplay.innerHTML = html;
+        }
+
+        function downloadResult(format) {
+            if (!currentJobId) return;
+            window.location.href = `/api/download/${currentJobId}/${format}`;
+        }
+    </script>
+</body>
+</html>

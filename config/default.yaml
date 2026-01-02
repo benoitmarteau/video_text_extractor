@@ -1,0 +1,49 @@
+# Video OCR Transcript Extractor - Default Configuration
+
+# Frame extraction settings
+frame_extraction:
+  fps: 2.0                      # Frames per second to extract
+  skip_similar_threshold: 0.95  # Skip frames with >95% similarity
+  max_frames: null              # Maximum frames to process (null = no limit)
+
+# OCR engine settings
+ocr:
+  engine: "easyocr"             # Options: easyocr, paddleocr, tesseract
+  languages:
+    - "en"
+  confidence_threshold: 0.5     # Minimum confidence to accept text
+  gpu: true                     # Use GPU acceleration if available
+  batch_size: 1                 # Number of frames to process at once
+
+# Text deduplication settings
+deduplication:
+  similarity_threshold: 0.85    # Levenshtein ratio for duplicate detection
+  min_new_chars: 10             # Minimum new characters to consider as new content
+  window_size: 3                # Number of previous frames to compare against
+
+# Transcript parsing settings (for Teams format)
+transcript_parsing:
+  enabled: true
+  timestamp_pattern: "\\d{1,2}:\\d{2}:\\d{2}"
+  speaker_detection: true
+  merge_consecutive: true       # Merge consecutive messages from same speaker
+
+# Output settings
+output:
+  format: "all"                 # Options: json, markdown, text, all
+  include_metadata: true
+  include_statistics: true
+  include_raw_text: true
+  pretty_print: true
+
+# Logging settings
+logging:
+  level: "INFO"                 # Options: DEBUG, INFO, WARNING, ERROR
+  file: null                    # Log file path (null = console only)
+  rich_formatting: true         # Use rich console formatting
+
+# Processing settings
+processing:
+  temp_dir: null                # Temporary directory (null = system temp)
+  cleanup_temp: true            # Clean up temporary files after processing
+  save_debug_frames: false      # Save extracted frames for debugging
