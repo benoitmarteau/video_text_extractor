@@ -40,6 +40,46 @@
             font-size: 1.1rem;
         }
 
+        .system-info {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .info-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .info-badge.gpu-available {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+
+        .info-badge.gpu-unavailable {
+            background: rgba(255, 200, 0, 0.1);
+            border: 1px solid rgba(255, 200, 0, 0.3);
+            color: #ffc800;
+        }
+
+        .info-badge.parallel {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #00d4ff;
+        }
+
+        .badge-icon {
+            font-size: 1rem;
+        }
+
         .card {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -177,6 +217,42 @@
             color: #00ff88;
         }
 
+        .eta-display {
+            color: #ffc800;
+            text-align: center;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .processing-mode {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .mode-badge {
+            padding: 0.4rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .mode-badge.gpu {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .mode-badge.parallel {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+        }
+
+        .mode-badge.sequential {
+            background: rgba(255, 200, 0, 0.2);
+            color: #ffc800;
+        }
+
         .results {
             display: none;
         }
@@ -287,7 +363,13 @@
     <div class="container">
         <header>
             <h1>Video OCR Transcript Extractor</h1>
-            <p class="subtitle">Extract and deduplicate scrolling text from screen recordings</p>
+            <p class="subtitle">Extract and deduplicate scrolling text from screen recordings (Zoom, Teams, etc.)</p>
+            <div class="system-info" id="systemInfo">
+                <div class="info-badge" id="gpuBadge">
+                    <span class="badge-icon">...</span>
+                    <span>Checking GPU...</span>
+                </div>
+            </div>
         </header>
 
         <div class="card">
@@ -346,6 +428,7 @@
 
         <div class="card progress-container" id="progressContainer">
             <h3 style="margin-bottom: 1rem;">Processing Video</h3>
+            <div class="processing-mode" id="processingMode"></div>
             <div class="progress-percentage" id="progressPercentage">0%</div>
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill" style="width: 0%"></div>
@@ -355,6 +438,7 @@
                 <span id="frameCounter" class="frame-counter"></span>
                 <span id="progressPhase"></span>
             </div>
+            <div class="eta-display" id="etaDisplay"></div>
         </div>
 
         <div class="card results" id="resultsContainer">
@@ -376,6 +460,12 @@
         let currentJobId = null;
         let selectedFile = null;
         let statusPollInterval = null;
+        let systemInfo = { gpu_available: false, num_workers: 4 };
+
+        // ETA tracking
+        let ocrStartTime = null;
+        let lastFrameCount = 0;
+        let frameTimestamps = [];
 
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
@@ -388,10 +478,48 @@
         const progressPercentage = document.getElementById('progressPercentage');
         const frameCounter = document.getElementById('frameCounter');
         const progressPhase = document.getElementById('progressPhase');
+        const processingMode = document.getElementById('processingMode');
+        const etaDisplay = document.getElementById('etaDisplay');
         const resultsContainer = document.getElementById('resultsContainer');
         const transcriptDisplay = document.getElementById('transcriptDisplay');
         const statsContainer = document.getElementById('stats');
         const errorMsg = document.getElementById('errorMsg');
+        const gpuBadge = document.getElementById('gpuBadge');
+
+        // Check system info on load
+        async function checkSystemInfo() {
+            try {
+                const response = await fetch('/api/system-info');
+                if (response.ok) {
+                    systemInfo = await response.json();
+                    updateGpuBadge();
+                }
+            } catch (e) {
+                console.error('Failed to get system info:', e);
+                // Default to showing parallel mode
+                systemInfo = { gpu_available: false, num_workers: 4 };
+                updateGpuBadge();
+            }
+        }
+
+        function updateGpuBadge() {
+            if (systemInfo.gpu_available) {
+                gpuBadge.className = 'info-badge gpu-available';
+                gpuBadge.innerHTML = `
+                    <span class="badge-icon">🚀</span>
+                    <span>GPU Accelerated</span>
+                `;
+            } else {
+                gpuBadge.className = 'info-badge gpu-unavailable';
+                gpuBadge.innerHTML = `
+                    <span class="badge-icon">⚡</span>
+                    <span>CPU Mode (${systemInfo.num_workers} parallel workers)</span>
+                `;
+            }
+        }
+
+        // Call on page load
+        checkSystemInfo();
 
         // Drag and drop handlers
         uploadZone.addEventListener('dragover', (e) => {
@@ -429,15 +557,82 @@
             errorMsg.classList.remove('active');
         }
 
-        function updateProgress(progress, message, totalFrames, currentFrame) {
+        function calculateETA(currentFrame, totalFrames) {
+            if (currentFrame <= 0 || totalFrames <= 0 || !ocrStartTime) {
+                return null;
+            }
+
+            // Track frame timestamps for moving average
+            const now = Date.now();
+            frameTimestamps.push({ frame: currentFrame, time: now });
+
+            // Keep only last 20 samples for moving average
+            if (frameTimestamps.length > 20) {
+                frameTimestamps.shift();
+            }
+
+            // Need at least 2 samples to calculate rate
+            if (frameTimestamps.length < 2) {
+                return null;
+            }
+
+            // Calculate frames per second using recent samples
+            const oldest = frameTimestamps[0];
+            const newest = frameTimestamps[frameTimestamps.length - 1];
+            const framesDone = newest.frame - oldest.frame;
+            const timeTaken = (newest.time - oldest.time) / 1000; // seconds
+
+            if (framesDone <= 0 || timeTaken <= 0) {
+                return null;
+            }
+
+            const framesPerSecond = framesDone / timeTaken;
+            const framesRemaining = totalFrames - currentFrame;
+            const secondsRemaining = framesRemaining / framesPerSecond;
+
+            return secondsRemaining;
+        }
+
+        function formatETA(seconds) {
+            if (seconds === null || seconds < 0 || !isFinite(seconds)) {
+                return '';
+            }
+
+            if (seconds < 60) {
+                return `~${Math.ceil(seconds)}s remaining`;
+            } else if (seconds < 3600) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.ceil(seconds % 60);
+                return `~${mins}m ${secs}s remaining`;
+            } else {
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.ceil((seconds % 3600) / 60);
+                return `~${hours}h ${mins}m remaining`;
+            }
+        }
+
+        function updateProgress(progress, message, totalFrames, currentFrame, processingModeInfo) {
             progressFill.style.width = `${progress}%`;
             progressPercentage.textContent = `${progress}%`;
             progressText.textContent = message || 'Processing...';
 
             if (totalFrames > 0 && currentFrame > 0) {
                 frameCounter.textContent = `Frame ${currentFrame} / ${totalFrames}`;
+
+                // Calculate and display ETA during OCR phase (15-85%)
+                if (progress >= 15 && progress < 85) {
+                    if (!ocrStartTime) {
+                        ocrStartTime = Date.now();
+                        frameTimestamps = [];
+                    }
+                    const eta = calculateETA(currentFrame, totalFrames);
+                    etaDisplay.textContent = formatETA(eta);
+                } else {
+                    etaDisplay.textContent = '';
+                }
             } else {
                 frameCounter.textContent = '';
+                etaDisplay.textContent = '';
             }
 
             // Determine phase based on progress
@@ -450,6 +645,19 @@
             else if (progress < 100) phase = 'Generating output';
             else phase = 'Complete';
             progressPhase.textContent = phase;
+
+            // Update processing mode display
+            if (processingModeInfo) {
+                let modeHtml = '';
+                if (processingModeInfo.gpu) {
+                    modeHtml = '<span class="mode-badge gpu">🚀 GPU Accelerated</span>';
+                } else if (processingModeInfo.parallel) {
+                    modeHtml = `<span class="mode-badge parallel">⚡ Parallel (${processingModeInfo.workers} workers)</span>`;
+                } else {
+                    modeHtml = '<span class="mode-badge sequential">🔄 Sequential CPU</span>';
+                }
+                processingMode.innerHTML = modeHtml;
+            }
         }
 
         async function pollStatus() {
@@ -463,7 +671,8 @@
                         status.progress,
                         status.progress_message,
                         status.total_frames,
-                        status.current_frame
+                        status.current_frame,
+                        status.processing_mode
                     );
                 }
             } catch (e) {
@@ -491,8 +700,13 @@
             resultsContainer.classList.remove('active');
             errorMsg.classList.remove('active');
 
+            // Reset ETA tracking
+            ocrStartTime = null;
+            frameTimestamps = [];
+
             // Reset progress display
-            updateProgress(0, 'Uploading video...', 0, 0);
+            updateProgress(0, 'Uploading video...', 0, 0, null);
+            processingMode.innerHTML = '';
 
             try {
                 // Upload video
@@ -518,7 +732,7 @@
                 startPolling();
 
                 // Start processing (this will block until complete)
-                updateProgress(1, 'Starting processing...', 0, 0);
+                updateProgress(1, 'Starting processing...', 0, 0, null);
 
                 const processResponse = await fetch(`/api/process/${currentJobId}`, {
                     method: 'POST'
@@ -567,8 +781,8 @@
                     <div class="stat-label">Words</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value">${(stats.deduplication_ratio * 100).toFixed(0)}%</div>
-                    <div class="stat-label">Unique Content</div>
+                    <div class="stat-value">${stats.frames_with_text || 0}</div>
+                    <div class="stat-label">Frames w/ Text</div>
                 </div>
             `;
 
@@ -589,7 +803,7 @@
                 html = `
                     <div class="entry">
                         <p style="color: #8892b0; margin-bottom: 1rem;">
-                            <em>No structured transcript detected. Showing raw OCR text:</em>
+                            <em>No structured transcript detected (Zoom/Teams format). Showing raw OCR text:</em>
                         </p>
                         <div class="message" style="white-space: pre-wrap;">${result.raw_text}</div>
                     </div>

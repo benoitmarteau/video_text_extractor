@@ -318,7 +318,14 @@ class OutputFormatter:
         raw_text: str,
     ) -> ExtractionStatistics:
         """Calculate extraction statistics."""
+        # Try to get text from transcript entries first
         all_text = " ".join(e.text for e in transcript.entries)
+
+        # If no transcript entries, use raw_text instead
+        # This fixes the "0 words" issue when transcript format isn't detected
+        if not all_text.strip() and raw_text:
+            all_text = raw_text
+
         words = all_text.split()
 
         confidences = [e.confidence for e in transcript.entries if e.confidence > 0]

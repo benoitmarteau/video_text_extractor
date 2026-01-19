@@ -141,12 +141,12 @@ class TestTextDeduplicator:
             OCRResult(full_text="Some text here", frame_number=0, timestamp_seconds=0.0),
             OCRResult(full_text="", frame_number=1, timestamp_seconds=0.5),
             OCRResult(full_text="   ", frame_number=2, timestamp_seconds=1.0),
-            OCRResult(full_text="More text here", frame_number=3, timestamp_seconds=1.5),
+            OCRResult(full_text="Completely different content now", frame_number=3, timestamp_seconds=1.5),
         ]
 
         result = dedup.deduplicate(ocr_results)
 
-        # Empty frames should be skipped
+        # Empty frames should be skipped, two frames have distinct content
         assert result.frames_with_new_content == 2
 
     def test_deduplicate_result_properties(self):

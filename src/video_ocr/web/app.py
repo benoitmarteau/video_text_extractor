@@ -1,5 +1,6 @@
 """Flask web application for Video OCR."""
 
+import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -18,6 +19,7 @@ from video_ocr.core.frame_extractor import FrameExtractor
 from video_ocr.core.ocr_engine import OCREngine
 from video_ocr.core.output_formatter import OutputFormatter, create_metadata
 from video_ocr.core.transcript_parser import TranscriptParser
+from video_ocr.core.parallel_ocr import ParallelOCRProcessor, ParallelOCRConfig, FrameTask
 from video_ocr.utils.logging_config import setup_logging, get_logger
 
 # Processing jobs storage
@@ -77,6 +79,8 @@ def create_app(config: Optional[dict] = None) -> "Flask":
         engine = request.form.get("engine", "easyocr")
         fps = float(request.form.get("fps", 2.0))
         language = request.form.get("language", "en")
+        use_parallel = request.form.get("parallel", "true").lower() == "true"
+        num_workers = int(request.form.get("workers", 0))  # 0 = auto
 
         # Initialize job
         _jobs[job_id] = {
@@ -87,6 +91,8 @@ def create_app(config: Optional[dict] = None) -> "Flask":
             "engine": engine,
             "fps": fps,
             "language": language,
+            "use_parallel": use_parallel,
+            "num_workers": num_workers,
             "result": None,
             "error": None,
             "total_frames": 0,
@@ -142,6 +148,7 @@ def create_app(config: Optional[dict] = None) -> "Flask":
             "total_frames": job.get("total_frames", 0),
             "current_frame": job.get("current_frame", 0),
             "error": job.get("error"),
+            "processing_mode": job.get("processing_mode"),
         })
 
     @app.route("/api/result/<job_id>")
@@ -203,6 +210,29 @@ def create_app(config: Optional[dict] = None) -> "Flask":
             "engines": OCREngine.available_engines(),
         })
 
+    @app.route("/api/system-info")
+    def system_info():
+        """Get system information (GPU availability, CPU cores)."""
+        try:
+            import torch
+            gpu_available = torch.cuda.is_available()
+            gpu_name = torch.cuda.get_device_name(0) if gpu_available else None
+        except ImportError:
+            gpu_available = False
+            gpu_name = None
+
+        # Calculate number of workers
+        import os
+        cpu_count = os.cpu_count() or 2
+        num_workers = min(cpu_count, 4)
+
+        return jsonify({
+            "gpu_available": gpu_available,
+            "gpu_name": gpu_name,
+            "cpu_count": cpu_count,
+            "num_workers": num_workers,
+        })
+
     return app
 
 
@@ -210,23 +240,70 @@ def _process_video_job(job_id: str, job: dict) -> dict:
     """Process a video extraction job."""
     job_short = job_id[:8]
     filepath = Path(job["filepath"])
+    use_parallel = job.get("use_parallel", True)
+    num_workers = job.get("num_workers", 0)
 
     logger.info(f"[Job {job_short}] Starting processing...")
 
     # Phase 1: Initialize components (0-5%)
     job["progress"] = 2
     job["progress_message"] = "Initializing OCR engine..."
-    logger.info(f"[Job {job_short}] Initializing {job['engine']} OCR engine...")
+    logger.info(f"[Job {job_short}] Initializing {job['engine']} OCR engine (parallel={use_parallel})...")
 
     frame_extractor = FrameExtractor(fps=job["fps"])
-    ocr_engine = OCREngine(
-        engine=job["engine"],
-        languages=[job["language"]],
-        gpu=True,
-    )
     deduplicator = TextDeduplicator()
     transcript_parser = TranscriptParser()
     output_formatter = OutputFormatter()
+
+    # Determine if we should use parallel processing
+    # GPU mode doesn't benefit from threading, so only parallelize for CPU
+    # Check if GPU is actually available
+    try:
+        import torch
+        gpu_available = torch.cuda.is_available()
+    except ImportError:
+        gpu_available = False
+
+    use_parallel_processing = use_parallel and not gpu_available
+
+    if use_parallel_processing:
+        # Create parallel processor
+        parallel_config = ParallelOCRConfig(
+            num_workers=num_workers,
+            engine=job["engine"],
+            languages=[job["language"]],
+            confidence_threshold=0.5,
+            gpu=False,
+        )
+        parallel_processor = ParallelOCRProcessor(parallel_config)
+        logger.info(f"[Job {job_short}] Using parallel OCR with {parallel_config.num_workers} workers")
+        # Store processing mode for status endpoint
+        job["processing_mode"] = {
+            "gpu": False,
+            "parallel": True,
+            "workers": parallel_config.num_workers,
+        }
+    else:
+        # Single-threaded with GPU
+        ocr_engine = OCREngine(
+            engine=job["engine"],
+            languages=[job["language"]],
+            gpu=gpu_available,
+        )
+        if gpu_available:
+            logger.info(f"[Job {job_short}] Using GPU-accelerated OCR (single-threaded)")
+            job["processing_mode"] = {
+                "gpu": True,
+                "parallel": False,
+                "workers": 1,
+            }
+        else:
+            logger.info(f"[Job {job_short}] Using single-threaded CPU OCR")
+            job["processing_mode"] = {
+                "gpu": False,
+                "parallel": False,
+                "workers": 1,
+            }
 
     # Phase 2: Get video info (5%)
     job["progress"] = 5
@@ -251,30 +328,59 @@ def _process_video_job(job_id: str, job: dict) -> dict:
     job["progress_message"] = f"Running OCR on {total_frames} frames..."
     logger.info(f"[Job {job_short}] Starting OCR processing on {total_frames} frames...")
 
-    ocr_results = []
-    texts_found = 0
-    for i, frame_info in enumerate(frames):
-        frame_num = i + 1
-        job["current_frame"] = frame_num
+    if use_parallel_processing:
+        # Convert frames to tasks
+        frame_tasks = [
+            FrameTask(
+                frame=frame_info.frame,
+                frame_number=frame_info.frame_number,
+                timestamp_seconds=frame_info.timestamp_seconds,
+            )
+            for frame_info in frames
+        ]
 
-        result = ocr_engine.process_frame(
-            frame_info.frame,
-            frame_number=frame_info.frame_number,
-            timestamp_seconds=frame_info.timestamp_seconds,
-        )
-        ocr_results.append(result)
+        # Progress callback for parallel processing
+        def update_progress(current: int, total: int, texts_found: int):
+            job["current_frame"] = current
+            progress_pct = 15 + int((current / total_frames) * 70)
+            job["progress"] = progress_pct
+            job["progress_message"] = f"OCR: Frame {current}/{total_frames} ({texts_found} with text)"
 
-        if result.has_text:
-            texts_found += 1
+            if current % 10 == 0 or current == total_frames:
+                logger.info(f"[Job {job_short}] OCR progress: {current}/{total_frames} frames ({texts_found} with text)")
 
-        # Update progress (15-85% range = 70% of progress bar)
-        progress_pct = 15 + int((frame_num / total_frames) * 70)
-        job["progress"] = progress_pct
-        job["progress_message"] = f"OCR: Frame {frame_num}/{total_frames} ({texts_found} with text)"
+        # Process in parallel
+        ocr_results = parallel_processor.process_frames(frame_tasks, progress_callback=update_progress)
+        texts_found = sum(1 for r in ocr_results if r.has_text)
 
-        # Log every 10 frames or on last frame
-        if frame_num % 10 == 0 or frame_num == total_frames:
-            logger.info(f"[Job {job_short}] OCR progress: {frame_num}/{total_frames} frames ({texts_found} with text)")
+        # Cleanup parallel processor
+        parallel_processor.cleanup()
+    else:
+        # Sequential processing (GPU or single CPU)
+        ocr_results = []
+        texts_found = 0
+        for i, frame_info in enumerate(frames):
+            frame_num = i + 1
+            job["current_frame"] = frame_num
+
+            result = ocr_engine.process_frame(
+                frame_info.frame,
+                frame_number=frame_info.frame_number,
+                timestamp_seconds=frame_info.timestamp_seconds,
+            )
+            ocr_results.append(result)
+
+            if result.has_text:
+                texts_found += 1
+
+            # Update progress (15-85% range = 70% of progress bar)
+            progress_pct = 15 + int((frame_num / total_frames) * 70)
+            job["progress"] = progress_pct
+            job["progress_message"] = f"OCR: Frame {frame_num}/{total_frames} ({texts_found} with text)"
+
+            # Log every 10 frames or on last frame
+            if frame_num % 10 == 0 or frame_num == total_frames:
+                logger.info(f"[Job {job_short}] OCR progress: {frame_num}/{total_frames} frames ({texts_found} with text)")
 
     logger.info(f"[Job {job_short}] OCR complete: {texts_found}/{total_frames} frames contained text")
 
@@ -311,7 +417,16 @@ def _process_video_job(job_id: str, job: dict) -> dict:
 
     job["progress"] = 100
     job["progress_message"] = "Complete!"
-    logger.info(f"[Job {job_short}] Processing complete! Words: {parsed.word_count}, Speakers: {len(parsed.speakers)}")
+
+    # Calculate word count from either transcript entries or raw text
+    # This fixes the "0 words" issue when transcript format isn't detected
+    if parsed.word_count > 0:
+        word_count = parsed.word_count
+    else:
+        # Fallback: count words in raw OCR text
+        word_count = len(dedup_result.full_text.split()) if dedup_result.full_text else 0
+
+    logger.info(f"[Job {job_short}] Processing complete! Words: {word_count}, Speakers: {len(parsed.speakers)}, Entries: {len(parsed.entries)}")
 
     # Generate outputs
     return {
@@ -324,8 +439,10 @@ def _process_video_job(job_id: str, job: dict) -> dict:
         "statistics": {
             "total_speakers": len(parsed.speakers),
             "total_messages": len(parsed.entries),
-            "word_count": parsed.word_count,
+            "word_count": word_count,  # Use calculated word count
+            "raw_word_count": len(dedup_result.full_text.split()) if dedup_result.full_text else 0,
             "frames_processed": len(frames),
+            "frames_with_text": texts_found,
             "deduplication_ratio": dedup_result.deduplication_ratio,
         },
     }

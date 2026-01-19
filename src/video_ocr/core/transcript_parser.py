@@ -63,7 +63,7 @@ class TranscriptParser:
     """
     Parse structured transcript content from OCR text.
 
-    Designed primarily for Microsoft Teams transcript format:
+    Designed for Zoom and Microsoft Teams transcript format:
     - Speaker name
     - Timestamp (HH:MM:SS)
     - Message text
@@ -240,15 +240,29 @@ class TranscriptParser:
 
         # Speaker names typically:
         # - Start with capital letter
-        # - Are relatively short (under 50 chars)
+        # - Are relatively short (under 50 chars, preferably under 30)
         # - Don't contain timestamps
         # - May contain @ for email-style names
+        # - Don't have many words (usually 1-4 words for names)
 
         if len(text) > 50:
             return False
 
         if self._timestamp_re.search(text):
             return False
+
+        # Count words - speaker names usually have 1-4 words
+        words = text.split()
+        if len(words) > 5:
+            return False
+
+        # Check for sentence-like patterns (contains common punctuation at end)
+        if text.endswith('.') or text.endswith('?') or text.endswith('!'):
+            # Could be a sentence, not a speaker name
+            # Speaker names rarely end with these punctuation marks
+            # Only allow if it's a single word (like "Dr." or abbreviations)
+            if len(words) > 1:
+                return False
 
         # Check if starts with capital or common name patterns
         if text[0].isupper():
