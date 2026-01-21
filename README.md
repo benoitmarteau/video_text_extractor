@@ -14,14 +14,15 @@ When you record a Zoom or Teams meeting, the transcript/caption panel shows scro
 ## Features
 
 - **Smart Frame Extraction**: Extracts frames at configurable FPS (default: 2) using OpenCV
-- **Multiple OCR Engines**: Support for EasyOCR (default), PaddleOCR (fastest/most accurate), and Tesseract
+- **Multiple OCR Engines**: Support for EasyOCR (default), Tesseract, Surya, docTR, and TrOCR
 - **Intelligent Deduplication**: Uses Levenshtein-based fuzzy string matching to handle scrolling content overlap
 - **Transcript Parsing**: Automatically detects Zoom/Teams format with speakers, timestamps (`HH:MM:SS`), and messages
 - **Multiple Output Formats**: JSON, Markdown, plain text, and SRT subtitles
 - **GPU Acceleration**: Optional CUDA support for faster OCR processing
-- **Parallel Processing**: Multi-threaded CPU processing for faster extraction without GPU
+- **Batch Processing**: Process multiple videos sequentially with automatic saving
 - **Dual Interface**: Both command-line (CLI) and web browser interfaces
-- **Real-time Progress**: Web interface shows processing progress with frame-by-frame updates
+- **Queue System**: Web interface supports queueing multiple videos for batch processing
+- **Real-time Progress**: Web interface shows processing progress with stable ETA display
 
 ## Installation
 
@@ -30,7 +31,7 @@ When you record a Zoom or Teams meeting, the transcript/caption panel shows scro
 - Python 3.9 or higher
 - For Tesseract: Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) system-wide
 
-### Basic Installation
+### Basic Installation (CPU only)
 
 ```bash
 # Clone the repository
@@ -41,33 +42,65 @@ cd video_text_extractor
 pip install -e .
 ```
 
-### With Optional Dependencies
+### Installation with GPU Support (Recommended)
 
+**Option A: Use the install script (easiest)**
 ```bash
-# With PaddleOCR support (recommended for production)
-pip install -e ".[paddleocr]"
+git clone https://github.com/benoitmarteau/video_text_extractor.git
+cd video_text_extractor
 
-# With Tesseract support
-pip install -e ".[tesseract]"
+# Run the GPU installation script (installs PyTorch with CUDA + all OCR engines)
+python install_gpu.py
 
-# With web interface
-pip install -e ".[web]"
+# Or specify CUDA version: --cuda 118, --cuda 126 (default), --cuda 128
+python install_gpu.py --cuda 126
+```
 
-# All optional dependencies
+**Option B: Manual installation**
+```bash
+git clone https://github.com/benoitmarteau/video_text_extractor.git
+cd video_text_extractor
+
+# Step 1: Install PyTorch with CUDA FIRST
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+# Step 2: Install package with all OCR engines + web interface
 pip install -e ".[all]"
 ```
 
+### Installation Options
+
+| Option | Command | Description |
+|--------|---------|-------------|
+| `[all]` | `pip install -e ".[all]"` | All OCR engines + web + dev tools |
+| `[all-ocr-web]` | `pip install -e ".[all-ocr-web]"` | All OCR engines + web (no dev tools) |
+| `[all-ocr]` | `pip install -e ".[all-ocr]"` | All OCR engines only |
+| `[surya]` | `pip install -e ".[surya]"` | Surya OCR (GPU, Python 3.10+) |
+| `[doctr]` | `pip install -e ".[doctr]"` | docTR (Mindee) |
+| `[trocr]` | `pip install -e ".[trocr]"` | TrOCR (Microsoft, GPU) |
+| `[tesseract]` | `pip install -e ".[tesseract]"` | Tesseract |
+| `[web]` | `pip install -e ".[web]"` | Web interface (Flask) |
+| `[dev]` | `pip install -e ".[dev]"` | Dev tools (pytest, black, etc.) |
+
 ### GPU Support
 
-For GPU acceleration with EasyOCR or PaddleOCR, install PyTorch with CUDA:
+For GPU acceleration with EasyOCR, Surya, docTR, or TrOCR, install PyTorch with CUDA **before** installing other dependencies:
 
 ```bash
-# For CUDA 11.8
+# Recommended: CUDA 12.6 (compatible with PyTorch 2.7+ required by Surya)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+# Alternative: CUDA 11.8 (for older systems)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
-# For CUDA 12.1
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Alternative: CUDA 12.8 (for newest GPUs)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 ```
+
+**Important Notes:**
+- **Surya OCR** requires PyTorch 2.7+ and Python 3.10+. Use `cu126` or `cu128` for full compatibility.
+- **TrOCR** also requires GPU and PyTorch with CUDA.
+- Install PyTorch with CUDA **first**, then install the package dependencies.
 
 Then set `gpu: true` in configuration or use `--gpu` flag in CLI.
 
@@ -90,11 +123,11 @@ video-ocr extract meeting_recording.mp4 \
     --output-format all \
     -o ./output/
 
-# Use parallel processing with 4 workers (CPU mode)
-video-ocr extract meeting_recording.mp4 --no-gpu --parallel --workers 4
+# Batch process multiple videos (files processed sequentially, results auto-saved)
+video-ocr batch video1.mp4 video2.mp4 video3.mp4 -o ./transcripts/
 
-# Disable parallel processing
-video-ocr extract meeting_recording.mp4 --no-parallel
+# Batch process all videos in a directory
+video-ocr batch *.mp4 -o ./transcripts/ --engine surya --gpu
 
 # View video information
 video-ocr info video.mp4
@@ -109,14 +142,21 @@ video-ocr engines
 # Start the web server
 python -m video_ocr.web.app
 
-# Opens at http://localhost:5000
+# Opens at http://localhost:8080
 ```
 
 The web interface provides:
-- Drag-and-drop video upload
-- Real-time processing progress (frame counter, percentage)
-- Preview of extracted transcript
-- Download in JSON, Markdown, or plain text formats
+- **Single Video Mode**:
+  - Drag-and-drop video upload
+  - Real-time processing progress with stable ETA display
+  - Preview of extracted transcript
+  - Download in JSON, Markdown, or plain text formats
+- **Queue Mode**:
+  - Add multiple videos to a processing queue (supports multi-file selection)
+  - Process all videos sequentially with per-video progress tracking
+  - Results are automatically saved
+  - Download individual results or **Download All** combined into single file
+  - **Cross-video deduplication**: Remove duplicate content across overlapping recordings
 
 ### Python API
 
@@ -188,7 +228,7 @@ Video File
     ▼
 ┌─────────────────────────────────────┐
 │ 2. OCR Processing                   │
-│    - EasyOCR / PaddleOCR / Tesseract│
+│    - EasyOCR / Tesseract / Surya    │
 │    - Detect text regions            │
 │    - Filter by confidence (≥0.5)    │
 └─────────────────────────────────────┘
@@ -282,11 +322,15 @@ Thanks for joining us today.
 
 ## OCR Engine Comparison
 
-| Engine | Accuracy | Speed | GPU Support | Languages | Best For |
-|--------|----------|-------|-------------|-----------|----------|
-| EasyOCR | High | Medium | Yes | 70+ | Default, good balance |
-| PaddleOCR | Highest | Fast | Yes | 80+ | Production, accuracy |
+| Engine | Accuracy | Speed | GPU Required | Languages | Best For |
+|--------|----------|-------|--------------|-----------|----------|
+| EasyOCR | High | Medium | No (optional) | 70+ | Default, good balance |
 | Tesseract | Medium | Medium | No | 100+ | Offline, CPU-only |
+| Surya | High | Very Fast | Yes* | 90+ | Fast multilingual OCR |
+| docTR | High | Fast | No (optional) | Limited | Document-focused OCR |
+| TrOCR | Highest | Slow | Yes | Limited | Printed/handwritten text |
+
+*Surya requires Python 3.10+ and PyTorch 2.7+
 
 ## Configuration
 
@@ -336,8 +380,10 @@ video_text_extractor/
 │   ├── engines/                # OCR implementations
 │   │   ├── base.py             # Abstract base class
 │   │   ├── easyocr_engine.py   # EasyOCR backend
-│   │   ├── paddleocr_engine.py # PaddleOCR backend
-│   │   └── tesseract_engine.py # Tesseract backend
+│   │   ├── tesseract_engine.py # Tesseract backend
+│   │   ├── surya_engine.py     # Surya OCR backend (GPU)
+│   │   ├── doctr_engine.py     # docTR backend
+│   │   └── trocr_engine.py     # TrOCR backend (GPU)
 │   ├── utils/                  # Utility functions
 │   │   ├── logging_config.py   # Rich console logging
 │   │   ├── similarity.py       # Fuzzy string matching
@@ -383,19 +429,19 @@ mypy src
 
 - **Frame extraction**: ~100 frames/second
 - **EasyOCR**: ~0.5-1 second per frame (with GPU)
-- **PaddleOCR**: ~0.2-0.5 second per frame (with GPU)
 - **Tesseract**: ~0.5-1 second per frame (CPU only)
-- **Parallel CPU processing**: ~2-4x speedup with multi-threading
+- **Surya**: ~0.1-0.3 second per frame (GPU required)
+- **docTR**: ~0.3-0.5 second per frame (with GPU)
+- **TrOCR**: ~1-2 seconds per frame (GPU required)
 - **1-hour video**: ~10-30 minutes total processing time
 
-### Parallel Processing
+### GPU Acceleration
 
-When running without a GPU, the tool automatically uses multi-threaded processing to speed up OCR:
-
-- By default, uses up to 4 CPU cores (or fewer based on available cores)
-- Each worker thread has its own OCR engine instance
-- Particularly effective for CPU-only environments
-- Can be disabled with `--no-parallel` flag
+For optimal performance, use GPU acceleration:
+- Significant speedup with CUDA-enabled GPUs
+- EasyOCR, Surya, docTR, and TrOCR support GPU processing
+- Surya and TrOCR require GPU (will not work on CPU-only systems)
+- Ensure PyTorch is installed with CUDA support
 
 ## Troubleshooting
 
@@ -403,7 +449,7 @@ When running without a GPU, the tool automatically uses multi-threaded processin
 
 This usually means the OCR detected text but couldn't parse it as a structured transcript. The raw OCR text is still available in the output. Try:
 - Lowering the confidence threshold (`--confidence-threshold 0.3`)
-- Using a different OCR engine (`--engine paddleocr`)
+- Using a different OCR engine (`--engine doctr`)
 - Checking if the video actually contains Teams transcript format
 
 ### Out of memory with large videos

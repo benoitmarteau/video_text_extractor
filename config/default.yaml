@@ -8,7 +8,7 @@ frame_extraction:
 
 # OCR engine settings
 ocr:
-  engine: "easyocr"             # Options: easyocr, paddleocr, tesseract
+  engine: "easyocr"             # Options: easyocr, tesseract, surya, doctr, trocr
   languages:
     - "en"
   confidence_threshold: 0.5     # Minimum confidence to accept text

@@ -1,5 +1,6 @@
 """OCR Engine wrapper with support for multiple backends."""
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Type
 
 import numpy as np
@@ -15,6 +16,17 @@ class OCREngineError(Exception):
     pass
 
 
+@dataclass
+class EngineInfo:
+    """Information about an OCR engine."""
+
+    name: str
+    display_name: str
+    requires_gpu: bool
+    description: str
+    installed: bool = False
+
+
 class OCREngine:
     """
     High-level OCR engine wrapper.
@@ -27,18 +39,66 @@ class OCREngine:
         "easyocr": EasyOCREngine,
     }
 
+    # Engine metadata (name -> info)
+    _engine_info: Dict[str, EngineInfo] = {
+        "easyocr": EngineInfo(
+            name="easyocr",
+            display_name="EasyOCR",
+            requires_gpu=False,
+            description="Good balance of speed and accuracy, 70+ languages",
+        ),
+        "tesseract": EngineInfo(
+            name="tesseract",
+            display_name="Tesseract",
+            requires_gpu=False,
+            description="Classic OCR, CPU-only, 100+ languages",
+        ),
+        "surya": EngineInfo(
+            name="surya",
+            display_name="Surya",
+            requires_gpu=True,
+            description="Very fast multilingual OCR, 90+ languages (GPU required)",
+        ),
+        "doctr": EngineInfo(
+            name="doctr",
+            display_name="docTR",
+            requires_gpu=False,
+            description="Document OCR by Mindee, high accuracy",
+        ),
+        "trocr": EngineInfo(
+            name="trocr",
+            display_name="TrOCR",
+            requires_gpu=True,
+            description="Microsoft Transformer OCR, best for printed/handwritten (GPU required)",
+        ),
+    }
+
     # Try to register optional engines
-    try:
-        from video_ocr.engines.paddleocr_engine import PaddleOCREngine
-
-        _engines["paddleocr"] = PaddleOCREngine
-    except ImportError:
-        pass
-
     try:
         from video_ocr.engines.tesseract_engine import TesseractEngine
 
         _engines["tesseract"] = TesseractEngine
+    except ImportError:
+        pass
+
+    try:
+        from video_ocr.engines.surya_engine import SuryaEngine
+
+        _engines["surya"] = SuryaEngine
+    except ImportError:
+        pass
+
+    try:
+        from video_ocr.engines.doctr_engine import DocTREngine
+
+        _engines["doctr"] = DocTREngine
+    except ImportError:
+        pass
+
+    try:
+        from video_ocr.engines.trocr_engine import TrOCREngine
+
+        _engines["trocr"] = TrOCREngine
     except ImportError:
         pass
 
@@ -53,7 +113,7 @@ class OCREngine:
         Initialize OCR engine.
 
         Args:
-            engine: Engine name ('easyocr', 'paddleocr', 'tesseract')
+            engine: Engine name ('easyocr', 'tesseract', 'surya', 'doctr', 'trocr')
             languages: List of language codes
             confidence_threshold: Minimum confidence to accept
             gpu: Use GPU acceleration if available
@@ -160,3 +220,38 @@ class OCREngine:
     def is_engine_available(cls, engine_name: str) -> bool:
         """Check if an engine is available."""
         return engine_name.lower() in cls._engines
+
+    @classmethod
+    def get_engine_info(cls, engine_name: str) -> Optional[EngineInfo]:
+        """Get information about a specific engine."""
+        info = cls._engine_info.get(engine_name.lower())
+        if info:
+            # Update installed status
+            info.installed = engine_name.lower() in cls._engines
+        return info
+
+    @classmethod
+    def get_all_engines_info(cls) -> List[EngineInfo]:
+        """Get information about all known engines (installed or not)."""
+        result = []
+        for name, info in cls._engine_info.items():
+            info.installed = name in cls._engines
+            result.append(info)
+        return result
+
+    @classmethod
+    def get_available_engines_info(cls) -> List[EngineInfo]:
+        """Get information about installed/available engines only."""
+        result = []
+        for name in cls._engines.keys():
+            info = cls._engine_info.get(name)
+            if info:
+                info.installed = True
+                result.append(info)
+        return result
+
+    @classmethod
+    def engine_requires_gpu(cls, engine_name: str) -> bool:
+        """Check if an engine requires GPU."""
+        info = cls._engine_info.get(engine_name.lower())
+        return info.requires_gpu if info else False

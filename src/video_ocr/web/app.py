@@ -3,8 +3,9 @@
 import os
 import tempfile
 import uuid
+from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 try:
     from flask import Flask, jsonify, render_template, request, send_file
@@ -19,11 +20,14 @@ from video_ocr.core.frame_extractor import FrameExtractor
 from video_ocr.core.ocr_engine import OCREngine
 from video_ocr.core.output_formatter import OutputFormatter, create_metadata
 from video_ocr.core.transcript_parser import TranscriptParser
-from video_ocr.core.parallel_ocr import ParallelOCRProcessor, ParallelOCRConfig, FrameTask
 from video_ocr.utils.logging_config import setup_logging, get_logger
 
 # Processing jobs storage
 _jobs: Dict[str, dict] = {}
+
+# Queue storage - ordered dict to maintain queue order
+_queue: OrderedDict[str, dict] = OrderedDict()
+_queue_processing: bool = False
 
 # Logger
 logger = None
@@ -79,8 +83,6 @@ def create_app(config: Optional[dict] = None) -> "Flask":
         engine = request.form.get("engine", "easyocr")
         fps = float(request.form.get("fps", 2.0))
         language = request.form.get("language", "en")
-        use_parallel = request.form.get("parallel", "true").lower() == "true"
-        num_workers = int(request.form.get("workers", 0))  # 0 = auto
 
         # Initialize job
         _jobs[job_id] = {
@@ -91,8 +93,6 @@ def create_app(config: Optional[dict] = None) -> "Flask":
             "engine": engine,
             "fps": fps,
             "language": language,
-            "use_parallel": use_parallel,
-            "num_workers": num_workers,
             "result": None,
             "error": None,
             "total_frames": 0,
@@ -205,9 +205,20 @@ def create_app(config: Optional[dict] = None) -> "Flask":
 
     @app.route("/api/engines")
     def list_engines():
-        """List available OCR engines."""
+        """List available OCR engines with detailed info."""
+        engines_info = []
+        for info in OCREngine.get_all_engines_info():
+            engines_info.append({
+                "name": info.name,
+                "display_name": info.display_name,
+                "requires_gpu": info.requires_gpu,
+                "description": info.description,
+                "installed": info.installed,
+            })
+
         return jsonify({
             "engines": OCREngine.available_engines(),
+            "engines_info": engines_info,
         })
 
     @app.route("/api/system-info")
@@ -233,77 +244,635 @@ def create_app(config: Optional[dict] = None) -> "Flask":
             "num_workers": num_workers,
         })
 
+    # ==================== Queue Management Endpoints ====================
+
+    @app.route("/api/queue/add", methods=["POST"])
+    def add_to_queue():
+        """Add a video to the processing queue."""
+        if "video" not in request.files:
+            return jsonify({"error": "No video file provided"}), 400
+
+        video_file = request.files["video"]
+
+        if video_file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
+        # Save uploaded file
+        queue_id = str(uuid.uuid4())
+        filename = f"{queue_id}_{video_file.filename}"
+        filepath = Path(app.config["UPLOAD_FOLDER"]) / filename
+        video_file.save(filepath)
+
+        # Get processing options - log raw values for debugging
+        raw_fps = request.form.get("fps")
+        engine = request.form.get("engine", "easyocr")
+        fps = float(raw_fps) if raw_fps else 2.0
+        language = request.form.get("language", "en")
+
+        logger.debug(f"[Queue] Raw form values: fps={raw_fps}, engine={engine}, language={language}")
+
+        # Add to queue
+        _queue[queue_id] = {
+            "status": "queued",
+            "position": len(_queue) + 1,
+            "filename": video_file.filename,
+            "filepath": str(filepath),
+            "engine": engine,
+            "fps": fps,
+            "language": language,
+            "result": None,
+            "error": None,
+        }
+
+        logger.info(f"[Queue] Added {video_file.filename} to queue (position {len(_queue)}, fps={fps}, engine={engine})")
+
+        return jsonify({
+            "queue_id": queue_id,
+            "position": len(_queue),
+            "status": "queued",
+            "filename": video_file.filename,
+        })
+
+    @app.route("/api/queue/status")
+    def queue_status():
+        """Get the status of the entire queue."""
+        queue_items = []
+        for i, (queue_id, item) in enumerate(_queue.items()):
+            queue_items.append({
+                "queue_id": queue_id,
+                "position": i + 1,
+                "filename": item["filename"],
+                "status": item["status"],
+                "error": item.get("error"),
+            })
+
+        return jsonify({
+            "processing": _queue_processing,
+            "total_items": len(_queue),
+            "items": queue_items,
+        })
+
+    @app.route("/api/queue/item/<queue_id>")
+    def queue_item_status(queue_id: str):
+        """Get the status of a specific queue item."""
+        if queue_id not in _queue:
+            return jsonify({"error": "Queue item not found"}), 404
+
+        item = _queue[queue_id]
+        position = list(_queue.keys()).index(queue_id) + 1
+
+        response = {
+            "queue_id": queue_id,
+            "position": position,
+            "filename": item["filename"],
+            "status": item["status"],
+            "error": item.get("error"),
+        }
+
+        # Include job progress if processing
+        if item["status"] == "processing" and item.get("job_id"):
+            job = _jobs.get(item["job_id"], {})
+            response["progress"] = job.get("progress", 0)
+            response["progress_message"] = job.get("progress_message", "")
+            response["current_frame"] = job.get("current_frame", 0)
+            response["total_frames"] = job.get("total_frames", 0)
+
+        return jsonify(response)
+
+    @app.route("/api/queue/remove/<queue_id>", methods=["DELETE"])
+    def remove_from_queue(queue_id: str):
+        """Remove an item from the queue (only if not processing)."""
+        if queue_id not in _queue:
+            return jsonify({"error": "Queue item not found"}), 404
+
+        item = _queue[queue_id]
+        if item["status"] == "processing":
+            return jsonify({"error": "Cannot remove item that is currently processing"}), 400
+
+        # Clean up file
+        try:
+            filepath = Path(item["filepath"])
+            if filepath.exists():
+                filepath.unlink()
+        except Exception as e:
+            logger.warning(f"[Queue] Failed to delete file for {queue_id}: {e}")
+
+        del _queue[queue_id]
+        logger.info(f"[Queue] Removed {item['filename']} from queue")
+
+        return jsonify({"status": "removed", "queue_id": queue_id})
+
+    @app.route("/api/queue/clear", methods=["DELETE"])
+    def clear_queue():
+        """Clear all queued (not processing) items from the queue."""
+        global _queue
+        removed = 0
+        to_remove = []
+
+        for queue_id, item in _queue.items():
+            if item["status"] not in ["processing"]:
+                to_remove.append(queue_id)
+
+        for queue_id in to_remove:
+            item = _queue[queue_id]
+            try:
+                filepath = Path(item["filepath"])
+                if filepath.exists():
+                    filepath.unlink()
+            except Exception:
+                pass
+            del _queue[queue_id]
+            removed += 1
+
+        logger.info(f"[Queue] Cleared {removed} items from queue")
+
+        return jsonify({"status": "cleared", "removed_count": removed})
+
+    @app.route("/api/queue/process", methods=["POST"])
+    def process_queue():
+        """Start processing the queue sequentially."""
+        global _queue_processing
+
+        if _queue_processing:
+            return jsonify({"error": "Queue is already being processed"}), 400
+
+        if not _queue:
+            return jsonify({"error": "Queue is empty"}), 400
+
+        _queue_processing = True
+        processed = 0
+        errors = 0
+
+        try:
+            for queue_id, item in list(_queue.items()):
+                if item["status"] != "queued":
+                    continue
+
+                item["status"] = "processing"
+                logger.info(f"[Queue] Processing {item['filename']}...")
+                logger.info(f"[Queue] Settings: engine={item['engine']}, fps={item['fps']}, language={item['language']}")
+
+                # Create a job for this queue item
+                job_id = str(uuid.uuid4())
+                item["job_id"] = job_id
+
+                _jobs[job_id] = {
+                    "status": "processing",
+                    "progress": 0,
+                    "progress_message": "Starting...",
+                    "filepath": item["filepath"],
+                    "engine": item["engine"],
+                    "fps": item["fps"],
+                    "language": item["language"],
+                    "result": None,
+                    "error": None,
+                    "total_frames": 0,
+                    "current_frame": 0,
+                }
+                logger.debug(f"[Queue] Job {job_id[:8]} created with fps={_jobs[job_id]['fps']}")
+
+                try:
+                    result = _process_video_job(job_id, _jobs[job_id])
+                    _jobs[job_id]["result"] = result
+                    _jobs[job_id]["status"] = "complete"
+                    item["status"] = "complete"
+                    item["result"] = result
+
+                    # Auto-save result
+                    _auto_save_result(item, result)
+                    processed += 1
+
+                    logger.info(f"[Queue] Completed {item['filename']}")
+
+                except Exception as e:
+                    _jobs[job_id]["status"] = "error"
+                    _jobs[job_id]["error"] = str(e)
+                    item["status"] = "error"
+                    item["error"] = str(e)
+                    errors += 1
+
+                    logger.error(f"[Queue] Error processing {item['filename']}: {e}")
+
+                finally:
+                    # Cleanup between queue items to prevent memory issues
+                    _cleanup_gpu_memory()
+
+        finally:
+            _queue_processing = False
+
+        return jsonify({
+            "status": "complete",
+            "processed": processed,
+            "errors": errors,
+        })
+
+    @app.route("/api/queue/results")
+    def queue_results():
+        """Get all completed results from the queue."""
+        results = []
+        for queue_id, item in _queue.items():
+            if item["status"] == "complete" and item.get("result"):
+                results.append({
+                    "queue_id": queue_id,
+                    "filename": item["filename"],
+                    "result": item["result"],
+                })
+
+        return jsonify({"results": results})
+
+    @app.route("/api/queue/download/<queue_id>/<format>")
+    def download_queue_result(queue_id: str, format: str):
+        """Download a queue item result in specified format."""
+        if queue_id not in _queue:
+            return jsonify({"error": "Queue item not found"}), 404
+
+        item = _queue[queue_id]
+
+        if item["status"] != "complete":
+            return jsonify({"error": "Item not complete"}), 400
+
+        result = item.get("result")
+        if not result:
+            return jsonify({"error": "No result available"}), 400
+
+        output_dir = Path(app.config["UPLOAD_FOLDER"])
+        base_filename = Path(item["filename"]).stem
+
+        if format == "json":
+            filepath = output_dir / f"{base_filename}_transcript.json"
+            filepath.write_text(result.get("json", "{}"), encoding="utf-8")
+            mimetype = "application/json"
+        elif format == "markdown":
+            filepath = output_dir / f"{base_filename}_transcript.md"
+            filepath.write_text(result.get("markdown", ""), encoding="utf-8")
+            mimetype = "text/markdown"
+        elif format == "text":
+            filepath = output_dir / f"{base_filename}_transcript.txt"
+            filepath.write_text(result.get("text", ""), encoding="utf-8")
+            mimetype = "text/plain"
+        else:
+            return jsonify({"error": "Invalid format"}), 400
+
+        return send_file(
+            filepath,
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filepath.name,
+        )
+
+    @app.route("/api/queue/download-all/<format>")
+    def download_all_queue_results(format: str):
+        """Download all completed queue results combined into a single file."""
+        # Get deduplication option from query parameter
+        deduplicate = request.args.get("deduplicate", "false").lower() == "true"
+
+        # Collect all completed results
+        completed_items = []
+        for queue_id, item in _queue.items():
+            if item["status"] == "complete" and item.get("result"):
+                completed_items.append({
+                    "filename": item["filename"],
+                    "result": item["result"],
+                })
+
+        if not completed_items:
+            return jsonify({"error": "No completed results to download"}), 400
+
+        # Combine results
+        combined_content = _combine_queue_results(completed_items, format, deduplicate)
+
+        if combined_content is None:
+            return jsonify({"error": "Invalid format"}), 400
+
+        # Determine file extension and mimetype
+        ext_map = {"json": ".json", "markdown": ".md", "text": ".txt"}
+        mime_map = {"json": "application/json", "markdown": "text/markdown", "text": "text/plain"}
+
+        if format not in ext_map:
+            return jsonify({"error": "Invalid format"}), 400
+
+        # Save combined file
+        output_dir = Path(app.config["UPLOAD_FOLDER"])
+        suffix = "_deduplicated" if deduplicate else ""
+        filepath = output_dir / f"combined_transcripts{suffix}{ext_map[format]}"
+        filepath.write_text(combined_content, encoding="utf-8")
+
+        return send_file(
+            filepath,
+            mimetype=mime_map[format],
+            as_attachment=True,
+            download_name=filepath.name,
+        )
+
     return app
+
+
+def _combine_queue_results(items: List[dict], format: str, deduplicate: bool = False) -> Optional[str]:
+    """
+    Combine multiple queue results into a single output.
+
+    Args:
+        items: List of dicts with 'filename' and 'result' keys
+        format: Output format ('json', 'markdown', 'text')
+        deduplicate: Whether to remove duplicate content across videos
+
+    Returns:
+        Combined content string, or None if invalid format
+    """
+    if not items:
+        return ""
+
+    # Collect all raw text for deduplication
+    all_raw_texts = []
+    for item in items:
+        raw_text = item["result"].get("raw_text", "")
+        if raw_text:
+            all_raw_texts.append(raw_text)
+
+    # Deduplicate if requested
+    if deduplicate and all_raw_texts:
+        combined_raw = _deduplicate_across_videos(all_raw_texts)
+    else:
+        combined_raw = "\n\n".join(all_raw_texts)
+
+    if format == "json":
+        import json
+        combined = {
+            "metadata": {
+                "combined_from": [item["filename"] for item in items],
+                "total_videos": len(items),
+                "deduplicated": deduplicate,
+            },
+            "videos": [],
+            "combined_raw_text": combined_raw,
+            "statistics": {
+                "total_words": len(combined_raw.split()) if combined_raw else 0,
+            },
+        }
+
+        for item in items:
+            result = item["result"]
+            combined["videos"].append({
+                "filename": item["filename"],
+                "transcript": result.get("transcript", []),
+                "speakers": result.get("speakers", []),
+                "statistics": result.get("statistics", {}),
+            })
+
+        return json.dumps(combined, indent=2, ensure_ascii=False)
+
+    elif format == "markdown":
+        lines = []
+        lines.append("# Combined Meeting Transcripts")
+        lines.append("")
+        lines.append(f"**Videos Combined**: {len(items)}")
+        lines.append(f"**Deduplication**: {'Enabled' if deduplicate else 'Disabled'}")
+        lines.append("")
+
+        # List source files
+        lines.append("## Source Files")
+        lines.append("")
+        for i, item in enumerate(items, 1):
+            lines.append(f"{i}. {item['filename']}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        if deduplicate:
+            # Show combined deduplicated text
+            lines.append("## Combined Transcript (Deduplicated)")
+            lines.append("")
+            if combined_raw.strip():
+                lines.append(combined_raw.strip())
+            else:
+                lines.append("*No text content found.*")
+            lines.append("")
+        else:
+            # Show each video's content separately
+            for item in items:
+                result = item["result"]
+                lines.append(f"## {item['filename']}")
+                lines.append("")
+
+                transcript = result.get("transcript", [])
+                raw_text = result.get("raw_text", "")
+
+                if transcript:
+                    for entry in transcript:
+                        if entry.get("speaker"):
+                            lines.append(f"**{entry['speaker']}** ({entry.get('timestamp', '')})")
+                        else:
+                            lines.append(f"*({entry.get('timestamp', '')})*")
+                        lines.append(entry.get("text", ""))
+                        lines.append("")
+                elif raw_text:
+                    lines.append("*No structured transcript format. Raw OCR text:*")
+                    lines.append("")
+                    lines.append(raw_text.strip())
+                    lines.append("")
+                else:
+                    lines.append("*No text content found.*")
+                    lines.append("")
+
+                lines.append("---")
+                lines.append("")
+
+        lines.append("*Generated by Video OCR Transcript Extractor*")
+        return "\n".join(lines)
+
+    elif format == "text":
+        lines = []
+        lines.append("=" * 60)
+        lines.append("COMBINED MEETING TRANSCRIPTS")
+        lines.append("=" * 60)
+        lines.append(f"Videos: {len(items)}")
+        lines.append(f"Deduplication: {'Enabled' if deduplicate else 'Disabled'}")
+        lines.append("")
+
+        if deduplicate:
+            lines.append("-" * 60)
+            lines.append("COMBINED TRANSCRIPT (DEDUPLICATED)")
+            lines.append("-" * 60)
+            lines.append("")
+            if combined_raw.strip():
+                lines.append(combined_raw.strip())
+            else:
+                lines.append("(No text content found)")
+            lines.append("")
+        else:
+            for item in items:
+                result = item["result"]
+                lines.append("-" * 60)
+                lines.append(f"FILE: {item['filename']}")
+                lines.append("-" * 60)
+                lines.append("")
+
+                transcript = result.get("transcript", [])
+                raw_text = result.get("raw_text", "")
+
+                if transcript:
+                    for entry in transcript:
+                        if entry.get("speaker"):
+                            lines.append(f"[{entry.get('timestamp', '')}] {entry['speaker']}:")
+                        else:
+                            lines.append(f"[{entry.get('timestamp', '')}]")
+                        lines.append(f"  {entry.get('text', '')}")
+                        lines.append("")
+                elif raw_text:
+                    lines.append("(No structured transcript format. Raw OCR text below)")
+                    lines.append("")
+                    lines.append(raw_text.strip())
+                    lines.append("")
+                else:
+                    lines.append("(No text content found)")
+                    lines.append("")
+
+        return "\n".join(lines)
+
+    return None
+
+
+def _deduplicate_across_videos(texts: List[str]) -> str:
+    """
+    Deduplicate text content across multiple videos.
+
+    This handles the case where multiple video recordings have overlapping content
+    (e.g., recording the same meeting from different time windows).
+
+    Args:
+        texts: List of raw text from each video
+
+    Returns:
+        Deduplicated combined text
+    """
+    from video_ocr.utils.similarity import levenshtein_ratio, normalize_text
+
+    if not texts:
+        return ""
+
+    if len(texts) == 1:
+        return texts[0]
+
+    # Split each text into lines
+    all_lines = []
+    for text in texts:
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        all_lines.extend(lines)
+
+    if not all_lines:
+        return ""
+
+    # Deduplicate lines using similarity matching
+    unique_lines = []
+    seen_normalized = set()
+    similarity_threshold = 0.85
+
+    for line in all_lines:
+        normalized = normalize_text(line)
+
+        # Skip if too short
+        if len(normalized) < 5:
+            continue
+
+        # Check if we've seen a similar line
+        is_duplicate = False
+        for seen in seen_normalized:
+            if levenshtein_ratio(normalized, seen, normalize=False) > similarity_threshold:
+                is_duplicate = True
+                break
+
+        if not is_duplicate:
+            unique_lines.append(line)
+            seen_normalized.add(normalized)
+
+    return "\n".join(unique_lines)
+
+
+def _cleanup_gpu_memory() -> None:
+    """Clean up GPU memory between queue items."""
+    import gc
+    gc.collect()
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            logger.debug("[Queue] GPU memory cache cleared")
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug(f"[Queue] GPU cleanup warning: {e}")
+
+
+def _auto_save_result(item: dict, result: dict) -> None:
+    """Auto-save queue item result to the upload folder."""
+    try:
+        output_dir = Path(item["filepath"]).parent
+        base_filename = Path(item["filename"]).stem
+
+        # Save all formats
+        json_path = output_dir / f"{base_filename}_transcript.json"
+        json_path.write_text(result.get("json", "{}"), encoding="utf-8")
+
+        md_path = output_dir / f"{base_filename}_transcript.md"
+        md_path.write_text(result.get("markdown", ""), encoding="utf-8")
+
+        txt_path = output_dir / f"{base_filename}_transcript.txt"
+        txt_path.write_text(result.get("text", ""), encoding="utf-8")
+
+        logger.info(f"[Queue] Auto-saved results for {item['filename']}")
+
+    except Exception as e:
+        logger.warning(f"[Queue] Failed to auto-save results for {item['filename']}: {e}")
 
 
 def _process_video_job(job_id: str, job: dict) -> dict:
     """Process a video extraction job."""
     job_short = job_id[:8]
     filepath = Path(job["filepath"])
-    use_parallel = job.get("use_parallel", True)
-    num_workers = job.get("num_workers", 0)
 
+    # Log all job parameters for debugging
     logger.info(f"[Job {job_short}] Starting processing...")
+    logger.info(f"[Job {job_short}] Job parameters: fps={job.get('fps')}, engine={job.get('engine')}, language={job.get('language')}")
 
     # Phase 1: Initialize components (0-5%)
     job["progress"] = 2
     job["progress_message"] = "Initializing OCR engine..."
-    logger.info(f"[Job {job_short}] Initializing {job['engine']} OCR engine (parallel={use_parallel})...")
 
     frame_extractor = FrameExtractor(fps=job["fps"])
     deduplicator = TextDeduplicator()
     transcript_parser = TranscriptParser()
     output_formatter = OutputFormatter()
 
-    # Determine if we should use parallel processing
-    # GPU mode doesn't benefit from threading, so only parallelize for CPU
-    # Check if GPU is actually available
+    # Check if GPU is available
     try:
         import torch
         gpu_available = torch.cuda.is_available()
     except ImportError:
         gpu_available = False
 
-    use_parallel_processing = use_parallel and not gpu_available
+    # Initialize single OCR engine (simpler, more reliable)
+    ocr_engine = OCREngine(
+        engine=job["engine"],
+        languages=[job["language"]],
+        gpu=gpu_available,
+    )
 
-    if use_parallel_processing:
-        # Create parallel processor
-        parallel_config = ParallelOCRConfig(
-            num_workers=num_workers,
-            engine=job["engine"],
-            languages=[job["language"]],
-            confidence_threshold=0.5,
-            gpu=False,
-        )
-        parallel_processor = ParallelOCRProcessor(parallel_config)
-        logger.info(f"[Job {job_short}] Using parallel OCR with {parallel_config.num_workers} workers")
-        # Store processing mode for status endpoint
+    if gpu_available:
+        logger.info(f"[Job {job_short}] Initializing {job['engine']} OCR engine (GPU accelerated)")
         job["processing_mode"] = {
-            "gpu": False,
-            "parallel": True,
-            "workers": parallel_config.num_workers,
+            "gpu": True,
+            "parallel": False,
+            "workers": 1,
         }
     else:
-        # Single-threaded with GPU
-        ocr_engine = OCREngine(
-            engine=job["engine"],
-            languages=[job["language"]],
-            gpu=gpu_available,
-        )
-        if gpu_available:
-            logger.info(f"[Job {job_short}] Using GPU-accelerated OCR (single-threaded)")
-            job["processing_mode"] = {
-                "gpu": True,
-                "parallel": False,
-                "workers": 1,
-            }
-        else:
-            logger.info(f"[Job {job_short}] Using single-threaded CPU OCR")
-            job["processing_mode"] = {
-                "gpu": False,
-                "parallel": False,
-                "workers": 1,
-            }
+        logger.info(f"[Job {job_short}] Initializing {job['engine']} OCR engine (CPU mode)")
+        job["processing_mode"] = {
+            "gpu": False,
+            "parallel": False,
+            "workers": 1,
+        }
 
     # Phase 2: Get video info (5%)
     job["progress"] = 5
@@ -328,59 +897,31 @@ def _process_video_job(job_id: str, job: dict) -> dict:
     job["progress_message"] = f"Running OCR on {total_frames} frames..."
     logger.info(f"[Job {job_short}] Starting OCR processing on {total_frames} frames...")
 
-    if use_parallel_processing:
-        # Convert frames to tasks
-        frame_tasks = [
-            FrameTask(
-                frame=frame_info.frame,
-                frame_number=frame_info.frame_number,
-                timestamp_seconds=frame_info.timestamp_seconds,
-            )
-            for frame_info in frames
-        ]
+    # Sequential processing (GPU or CPU)
+    ocr_results = []
+    texts_found = 0
+    for i, frame_info in enumerate(frames):
+        frame_num = i + 1
+        job["current_frame"] = frame_num
 
-        # Progress callback for parallel processing
-        def update_progress(current: int, total: int, texts_found: int):
-            job["current_frame"] = current
-            progress_pct = 15 + int((current / total_frames) * 70)
-            job["progress"] = progress_pct
-            job["progress_message"] = f"OCR: Frame {current}/{total_frames} ({texts_found} with text)"
+        result = ocr_engine.process_frame(
+            frame_info.frame,
+            frame_number=frame_info.frame_number,
+            timestamp_seconds=frame_info.timestamp_seconds,
+        )
+        ocr_results.append(result)
 
-            if current % 10 == 0 or current == total_frames:
-                logger.info(f"[Job {job_short}] OCR progress: {current}/{total_frames} frames ({texts_found} with text)")
+        if result.has_text:
+            texts_found += 1
 
-        # Process in parallel
-        ocr_results = parallel_processor.process_frames(frame_tasks, progress_callback=update_progress)
-        texts_found = sum(1 for r in ocr_results if r.has_text)
+        # Update progress (15-85% range = 70% of progress bar)
+        progress_pct = 15 + int((frame_num / total_frames) * 70)
+        job["progress"] = progress_pct
+        job["progress_message"] = f"OCR: Frame {frame_num}/{total_frames} ({texts_found} with text)"
 
-        # Cleanup parallel processor
-        parallel_processor.cleanup()
-    else:
-        # Sequential processing (GPU or single CPU)
-        ocr_results = []
-        texts_found = 0
-        for i, frame_info in enumerate(frames):
-            frame_num = i + 1
-            job["current_frame"] = frame_num
-
-            result = ocr_engine.process_frame(
-                frame_info.frame,
-                frame_number=frame_info.frame_number,
-                timestamp_seconds=frame_info.timestamp_seconds,
-            )
-            ocr_results.append(result)
-
-            if result.has_text:
-                texts_found += 1
-
-            # Update progress (15-85% range = 70% of progress bar)
-            progress_pct = 15 + int((frame_num / total_frames) * 70)
-            job["progress"] = progress_pct
-            job["progress_message"] = f"OCR: Frame {frame_num}/{total_frames} ({texts_found} with text)"
-
-            # Log every 10 frames or on last frame
-            if frame_num % 10 == 0 or frame_num == total_frames:
-                logger.info(f"[Job {job_short}] OCR progress: {frame_num}/{total_frames} frames ({texts_found} with text)")
+        # Log every 10 frames or on last frame
+        if frame_num % 10 == 0 or frame_num == total_frames:
+            logger.info(f"[Job {job_short}] OCR progress: {frame_num}/{total_frames} frames ({texts_found} with text)")
 
     logger.info(f"[Job {job_short}] OCR complete: {texts_found}/{total_frames} frames contained text")
 
@@ -428,11 +969,11 @@ def _process_video_job(job_id: str, job: dict) -> dict:
 
     logger.info(f"[Job {job_short}] Processing complete! Words: {word_count}, Speakers: {len(parsed.speakers)}, Entries: {len(parsed.entries)}")
 
-    # Generate outputs
+    # Generate outputs - pass raw_text to all formatters for fallback
     return {
         "json": output_formatter.format_json(parsed, metadata, dedup_result.full_text),
-        "markdown": output_formatter.format_markdown(parsed, metadata),
-        "text": output_formatter.format_text(parsed, metadata),
+        "markdown": output_formatter.format_markdown(parsed, metadata, dedup_result.full_text),
+        "text": output_formatter.format_text(parsed, metadata, dedup_result.full_text),
         "transcript": [e.to_dict() for e in parsed.entries],
         "speakers": parsed.speakers,
         "raw_text": dedup_result.full_text,  # Include raw OCR text as fallback

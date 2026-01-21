@@ -64,14 +64,18 @@ class TranscriptParser:
     Parse structured transcript content from OCR text.
 
     Designed for Zoom and Microsoft Teams transcript format:
-    - Speaker name
+    - Avatar initials (e.g., "OO", "MN") - optional
+    - Speaker name (e.g., "May D Wang@GT&EmoryU", "John Smith")
     - Timestamp (HH:MM:SS)
     - Message text
     """
 
-    # Patterns for Teams transcript format
+    # Patterns for transcript format
     DEFAULT_TIMESTAMP_PATTERN = r"(\d{1,2}:\d{2}:\d{2})"
     DEFAULT_SPEAKER_PATTERN = r"^([A-Z][A-Za-z\s\.\-@&]+?)(?:\s*\n|\s+\d)"
+
+    # Pattern for Zoom avatar initials (2-3 capital letters)
+    AVATAR_INITIALS_PATTERN = r"^[A-Z]{2,3}$"
 
     def __init__(
         self,
@@ -154,6 +158,11 @@ class TranscriptParser:
                 i += 1
                 continue
 
+            # Skip avatar initials (like "OO", "MN", "BT") - they precede speaker names
+            if self._looks_like_avatar_initials(line):
+                i += 1
+                continue
+
             # Try to detect timestamp
             timestamp_match = self._timestamp_re.search(line)
 
@@ -175,13 +184,25 @@ class TranscriptParser:
                 timestamp_str = timestamp_match.group(1)
                 before_timestamp = line[: timestamp_match.start()].strip()
 
-                # Look at previous line for speaker
+                # Look at previous lines for speaker (may skip avatar initials)
                 if not before_timestamp and i > 0:
-                    prev_line = lines[i - 1].strip()
-                    if prev_line and not self._timestamp_re.search(prev_line):
+                    # Look back up to 2 lines for speaker name (skipping avatar initials)
+                    for lookback in range(1, min(3, i + 1)):
+                        prev_line = lines[i - lookback].strip()
+                        if not prev_line:
+                            continue
+                        # Skip avatar initials
+                        if self._looks_like_avatar_initials(prev_line):
+                            continue
+                        # Skip timestamps
+                        if self._timestamp_re.search(prev_line):
+                            break
                         # Check if it looks like a speaker name
                         if self._looks_like_speaker(prev_line):
                             current_speaker = self._clean_speaker_name(prev_line)
+                            break
+                        # Not a speaker name, might be message text from previous entry
+                        break
                 elif before_timestamp:
                     if self._looks_like_speaker(before_timestamp):
                         current_speaker = self._clean_speaker_name(before_timestamp)
@@ -197,7 +218,7 @@ class TranscriptParser:
             elif current_timestamp:
                 # We have a timestamp, this is message text
                 # Check if this line looks like a new speaker (without timestamp)
-                if self._looks_like_speaker(line) and len(line) < 50:
+                if self._looks_like_speaker(line) and len(line) < 60:
                     # Could be a new speaker, save current entry
                     if current_text_lines:
                         entries.append(
@@ -230,6 +251,20 @@ class TranscriptParser:
 
         return entries
 
+    def _looks_like_avatar_initials(self, text: str) -> bool:
+        """Check if text looks like Zoom avatar initials (e.g., 'OO', 'MN', 'BT')."""
+        if not text:
+            return False
+
+        text = text.strip()
+
+        # Avatar initials are typically 2-3 capital letters
+        if len(text) < 2 or len(text) > 3:
+            return False
+
+        # Must be all uppercase letters
+        return text.isupper() and text.isalpha()
+
     def _looks_like_speaker(self, text: str) -> bool:
         """Check if text looks like a speaker name."""
         if not text:
@@ -238,22 +273,26 @@ class TranscriptParser:
         # Remove common artifacts
         text = text.strip()
 
+        # Skip very short text (likely OCR noise)
+        if len(text) < 2:
+            return False
+
         # Speaker names typically:
         # - Start with capital letter
-        # - Are relatively short (under 50 chars, preferably under 30)
+        # - Are relatively short (under 60 chars)
         # - Don't contain timestamps
-        # - May contain @ for email-style names
-        # - Don't have many words (usually 1-4 words for names)
+        # - May contain @ for email-style names (Zoom format)
+        # - Don't have too many words (usually 1-6 words for names with affiliations)
 
-        if len(text) > 50:
+        if len(text) > 60:
             return False
 
         if self._timestamp_re.search(text):
             return False
 
-        # Count words - speaker names usually have 1-4 words
+        # Count words - speaker names usually have 1-6 words (allow more for affiliations)
         words = text.split()
-        if len(words) > 5:
+        if len(words) > 6:
             return False
 
         # Check for sentence-like patterns (contains common punctuation at end)
@@ -264,10 +303,16 @@ class TranscriptParser:
             if len(words) > 1:
                 return False
 
+        # Skip if it's just avatar initials (2-3 capital letters)
+        # These should be handled separately, not as speaker names
+        if self._looks_like_avatar_initials(text):
+            return False
+
         # Check if starts with capital or common name patterns
         if text[0].isupper():
             return True
 
+        # Zoom format: names may contain @ for email-style (e.g., "May D Wang@GT&EmoryU")
         if "@" in text:
             return True
 

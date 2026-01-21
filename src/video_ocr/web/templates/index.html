@@ -143,6 +143,26 @@
             border-color: #00d4ff;
         }
 
+        /* Style for dropdown options */
+        select option {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 0.5rem;
+        }
+
+        /* Disabled options (GPU-required engines when no GPU) */
+        select option:disabled {
+            color: #555;
+            background: #1a1a2e;
+            font-style: italic;
+        }
+
+        /* Available options should be clearly visible */
+        select option:not(:disabled) {
+            color: #fff;
+            font-weight: 500;
+        }
+
         .btn {
             background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
             color: #000;
@@ -357,6 +377,269 @@
             color: #00ff88;
             margin-top: 1rem;
         }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #8892b0;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .tab-btn:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 212, 255, 0.15);
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Queue Styles */
+        .queue-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 1rem 0;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .queue-item-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex: 1;
+        }
+
+        .queue-position {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 212, 255, 0.2);
+            border-radius: 50%;
+            font-weight: 600;
+            color: #00d4ff;
+            font-size: 0.9rem;
+        }
+
+        .queue-filename {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .queue-status {
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .queue-status.queued {
+            background: rgba(136, 146, 176, 0.2);
+            color: #8892b0;
+        }
+
+        .queue-status.processing {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+        }
+
+        .queue-status.complete {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .queue-status.error {
+            background: rgba(255, 82, 82, 0.2);
+            color: #ff5252;
+        }
+
+        .queue-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-left: 1rem;
+        }
+
+        .queue-btn {
+            padding: 0.4rem 0.8rem;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #8892b0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+        }
+
+        .queue-btn:hover {
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .queue-btn.remove:hover {
+            border-color: #ff5252;
+            color: #ff5252;
+        }
+
+        .queue-btn.download:hover {
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        .queue-controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .queue-controls .btn {
+            margin-top: 0;
+        }
+
+        .queue-empty {
+            text-align: center;
+            padding: 3rem;
+            color: #8892b0;
+        }
+
+        .queue-progress {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 212, 255, 0.05);
+            border-radius: 6px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .queue-progress-text {
+            text-align: center;
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .queue-progress-details {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #8892b0;
+        }
+
+        .queue-progress-eta {
+            color: #ffc800;
+            text-align: center;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .queue-progress-percentage {
+            color: #00d4ff;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-align: center;
+            margin-bottom: 0.3rem;
+        }
+
+        .queue-overall-progress {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .queue-overall-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 0.3rem;
+        }
+
+        /* Download All Section */
+        .download-all-section {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-radius: 8px;
+        }
+
+        .dedup-option {
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            color: #e0e0e0;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #00d4ff;
+        }
+
+        .help-text {
+            display: block;
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.3rem;
+            margin-left: 26px;
+        }
+
+        .download-all-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .download-all-buttons .btn {
+            flex: 1;
+            min-width: 140px;
+            margin-top: 0;
+            padding: 0.7rem 1rem;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -372,6 +655,14 @@
             </div>
         </header>
 
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('single')">Single Video</button>
+            <button class="tab-btn" onclick="switchTab('queue')">Queue Mode</button>
+        </div>
+
+        <!-- Single Video Tab -->
+        <div class="tab-content active" id="singleTab">
         <div class="card">
             <div class="upload-zone" id="uploadZone">
                 <div class="upload-icon">📹</div>
@@ -391,9 +682,8 @@
                 <div class="form-group">
                     <label for="engine">OCR Engine</label>
                     <select id="engine">
-                        <option value="easyocr">EasyOCR (Recommended)</option>
-                        <option value="paddleocr">PaddleOCR</option>
-                        <option value="tesseract">Tesseract</option>
+                        <!-- Dynamically populated based on GPU availability -->
+                        <option value="easyocr">Loading engines...</option>
                     </select>
                 </div>
 
@@ -402,8 +692,10 @@
                     <select id="fps">
                         <option value="1">1 FPS (Faster)</option>
                         <option value="2" selected>2 FPS (Balanced)</option>
-                        <option value="3">3 FPS (More Detail)</option>
-                        <option value="5">5 FPS (Maximum)</option>
+                        <option value="3">3 FPS</option>
+                        <option value="5">5 FPS</option>
+                        <option value="10">10 FPS (High Detail)</option>
+                        <option value="15">15 FPS (Very High)</option>
                     </select>
                 </div>
 
@@ -454,6 +746,123 @@
 
             <div class="transcript-display" id="transcriptDisplay"></div>
         </div>
+        </div> <!-- End singleTab -->
+
+        <!-- Queue Tab -->
+        <div class="tab-content" id="queueTab">
+            <div class="card">
+                <h3 style="margin-bottom: 1rem;">Add Videos to Queue</h3>
+                <div class="upload-zone" id="queueUploadZone">
+                    <div class="upload-icon">📁</div>
+                    <p>Drop video files here or click to add to queue</p>
+                    <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+                        Add multiple videos for batch processing
+                    </p>
+                    <input type="file" id="queueFileInput" accept="video/*" multiple>
+                </div>
+
+                <div class="options-grid">
+                    <div class="form-group">
+                        <label for="queueEngine">OCR Engine</label>
+                        <select id="queueEngine">
+                            <!-- Dynamically populated based on GPU availability -->
+                            <option value="easyocr">Loading engines...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="queueFps">Frames per Second</label>
+                        <select id="queueFps">
+                            <option value="1">1 FPS (Faster)</option>
+                            <option value="2" selected>2 FPS (Balanced)</option>
+                            <option value="3">3 FPS</option>
+                            <option value="5">5 FPS</option>
+                            <option value="10">10 FPS (High Detail)</option>
+                            <option value="15">15 FPS (Very High)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="queueLanguage">Language</label>
+                        <select id="queueLanguage">
+                            <option value="en">English</option>
+                            <option value="ch">Chinese</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="es">Spanish</option>
+                            <option value="ja">Japanese</option>
+                            <option value="ko">Korean</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 1rem;">Processing Queue</h3>
+                <div id="queueList" class="queue-list">
+                    <div class="queue-empty">
+                        No videos in queue. Add some videos above to get started.
+                    </div>
+                </div>
+
+                <div id="queueProgress" class="queue-progress" style="display: none;">
+                    <div class="queue-progress-text" id="queueProgressText">Processing queue...</div>
+                    <div class="queue-progress-percentage" id="queueItemProgressPct">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="queueItemProgressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="queue-progress-details">
+                        <span id="queueItemFrameCounter"></span>
+                        <span id="queueItemPhase"></span>
+                    </div>
+                    <div class="queue-progress-eta" id="queueItemEta"></div>
+
+                    <div class="queue-overall-progress">
+                        <div class="queue-overall-label">Overall Queue Progress</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="queueProgressFill" style="width: 0%"></div>
+                        </div>
+                        <div class="queue-progress-details">
+                            <span id="queueOverallCount"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="queue-controls">
+                    <button class="btn" id="processQueueBtn" disabled onclick="processQueue()">
+                        Process All Videos
+                    </button>
+                    <button class="btn btn-secondary" id="clearQueueBtn" disabled onclick="clearQueue()">
+                        Clear Queue
+                    </button>
+                </div>
+
+                <!-- Download All Section -->
+                <div id="downloadAllSection" class="download-all-section" style="display: none;">
+                    <h4 style="margin-bottom: 0.5rem; color: #00ff88;">Download All Results</h4>
+                    <div class="dedup-option">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="deduplicateCheckbox">
+                            <span>Remove duplicate content across videos</span>
+                        </label>
+                        <span class="help-text">(Useful when recordings have overlapping transcripts)</span>
+                    </div>
+                    <div class="download-all-buttons">
+                        <button class="btn btn-secondary" onclick="downloadAllResults('json')">
+                            Download All (JSON)
+                        </button>
+                        <button class="btn btn-secondary" onclick="downloadAllResults('markdown')">
+                            Download All (Markdown)
+                        </button>
+                        <button class="btn btn-secondary" onclick="downloadAllResults('text')">
+                            Download All (Text)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="error" id="queueErrorMsg"></div>
+            </div>
+        </div> <!-- End queueTab -->
     </div>
 
     <script>
@@ -462,10 +871,12 @@
         let statusPollInterval = null;
         let systemInfo = { gpu_available: false, num_workers: 4 };
 
-        // ETA tracking
+        // ETA tracking with exponential smoothing for stability
         let ocrStartTime = null;
         let lastFrameCount = 0;
-        let frameTimestamps = [];
+        let smoothedSecondsPerFrame = null;  // Exponentially smoothed rate
+        let lastEtaUpdate = 0;
+        let lastDisplayedEta = null;
 
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
@@ -486,7 +897,10 @@
         const errorMsg = document.getElementById('errorMsg');
         const gpuBadge = document.getElementById('gpuBadge');
 
-        // Check system info on load
+        // Engine info storage
+        let enginesInfo = [];
+
+        // Check system info and load engines on page load
         async function checkSystemInfo() {
             try {
                 const response = await fetch('/api/system-info');
@@ -496,9 +910,91 @@
                 }
             } catch (e) {
                 console.error('Failed to get system info:', e);
-                // Default to showing parallel mode
                 systemInfo = { gpu_available: false, num_workers: 4 };
                 updateGpuBadge();
+            }
+
+            // Load engines after we know GPU status
+            await loadEngines();
+        }
+
+        async function loadEngines() {
+            try {
+                const response = await fetch('/api/engines');
+                if (response.ok) {
+                    const data = await response.json();
+                    enginesInfo = data.engines_info || [];
+                    populateEngineSelects();
+                }
+            } catch (e) {
+                console.error('Failed to load engines:', e);
+                // Fallback to default engines
+                enginesInfo = [
+                    { name: 'easyocr', display_name: 'EasyOCR', requires_gpu: false, installed: true },
+                ];
+                populateEngineSelects();
+            }
+        }
+
+        function populateEngineSelects() {
+            const engineSelect = document.getElementById('engine');
+            const queueEngineSelect = document.getElementById('queueEngine');
+
+            // Clear existing options
+            engineSelect.innerHTML = '';
+            queueEngineSelect.innerHTML = '';
+
+            // Sort engines: installed first, then by name
+            const sortedEngines = [...enginesInfo].sort((a, b) => {
+                if (a.installed !== b.installed) return b.installed - a.installed;
+                return a.name.localeCompare(b.name);
+            });
+
+            let firstAvailable = null;
+
+            for (const engine of sortedEngines) {
+                // Skip engines that aren't installed
+                if (!engine.installed) continue;
+
+                // Check if GPU-only engine should be disabled
+                const needsGpu = engine.requires_gpu;
+                const gpuAvailable = systemInfo.gpu_available;
+                const isDisabled = needsGpu && !gpuAvailable;
+
+                // Track first available engine
+                if (!firstAvailable && !isDisabled) {
+                    firstAvailable = engine.name;
+                }
+
+                // Create option element
+                const option = document.createElement('option');
+                option.value = engine.name;
+
+                // Build label
+                let label = engine.display_name;
+                if (engine.name === 'easyocr') label += ' (Recommended)';
+                if (needsGpu && !gpuAvailable) label += ' [GPU Required]';
+                if (needsGpu && gpuAvailable) label += ' [GPU]';
+
+                option.textContent = label;
+                option.disabled = isDisabled;
+
+                // Add tooltip for disabled engines
+                if (isDisabled) {
+                    option.title = `${engine.display_name} requires a GPU. Install PyTorch with CUDA support to enable.`;
+                } else {
+                    option.title = engine.description;
+                }
+
+                // Add to both selects
+                engineSelect.appendChild(option.cloneNode(true));
+                queueEngineSelect.appendChild(option);
+            }
+
+            // Select the first available option
+            if (firstAvailable) {
+                engineSelect.value = firstAvailable;
+                queueEngineSelect.value = firstAvailable;
             }
         }
 
@@ -507,13 +1003,13 @@
                 gpuBadge.className = 'info-badge gpu-available';
                 gpuBadge.innerHTML = `
                     <span class="badge-icon">🚀</span>
-                    <span>GPU Accelerated</span>
+                    <span>GPU Accelerated (${systemInfo.gpu_name || 'CUDA'})</span>
                 `;
             } else {
                 gpuBadge.className = 'info-badge gpu-unavailable';
                 gpuBadge.innerHTML = `
-                    <span class="badge-icon">⚡</span>
-                    <span>CPU Mode (${systemInfo.num_workers} parallel workers)</span>
+                    <span class="badge-icon">💻</span>
+                    <span>CPU Mode</span>
                 `;
             }
         }
@@ -559,38 +1055,53 @@
 
         function calculateETA(currentFrame, totalFrames) {
             if (currentFrame <= 0 || totalFrames <= 0 || !ocrStartTime) {
-                return null;
+                return lastDisplayedEta;  // Return last known ETA instead of null
             }
 
-            // Track frame timestamps for moving average
             const now = Date.now();
-            frameTimestamps.push({ frame: currentFrame, time: now });
 
-            // Keep only last 20 samples for moving average
-            if (frameTimestamps.length > 20) {
-                frameTimestamps.shift();
+            // Calculate instantaneous rate if we have previous frame data
+            if (lastFrameCount > 0 && currentFrame > lastFrameCount && lastEtaUpdate > 0) {
+                const framesDelta = currentFrame - lastFrameCount;
+                const timeDelta = (now - lastEtaUpdate) / 1000;  // seconds
+
+                if (timeDelta > 0 && framesDelta > 0) {
+                    const instantSecondsPerFrame = timeDelta / framesDelta;
+
+                    // Exponential smoothing (alpha = 0.1 for very smooth updates)
+                    // Lower alpha = more stable but slower to react
+                    const alpha = 0.1;
+                    if (smoothedSecondsPerFrame === null) {
+                        smoothedSecondsPerFrame = instantSecondsPerFrame;
+                    } else {
+                        smoothedSecondsPerFrame = alpha * instantSecondsPerFrame + (1 - alpha) * smoothedSecondsPerFrame;
+                    }
+                }
             }
 
-            // Need at least 2 samples to calculate rate
-            if (frameTimestamps.length < 2) {
-                return null;
+            // Update tracking variables
+            lastFrameCount = currentFrame;
+            lastEtaUpdate = now;
+
+            // Calculate ETA using smoothed rate
+            if (smoothedSecondsPerFrame !== null && smoothedSecondsPerFrame > 0) {
+                const framesRemaining = totalFrames - currentFrame;
+                const secondsRemaining = framesRemaining * smoothedSecondsPerFrame;
+                lastDisplayedEta = secondsRemaining;
+                return secondsRemaining;
             }
 
-            // Calculate frames per second using recent samples
-            const oldest = frameTimestamps[0];
-            const newest = frameTimestamps[frameTimestamps.length - 1];
-            const framesDone = newest.frame - oldest.frame;
-            const timeTaken = (newest.time - oldest.time) / 1000; // seconds
-
-            if (framesDone <= 0 || timeTaken <= 0) {
-                return null;
+            // Fallback: use total elapsed time for initial estimate
+            const elapsedSeconds = (now - ocrStartTime) / 1000;
+            if (currentFrame > 0 && elapsedSeconds > 0) {
+                const avgSecondsPerFrame = elapsedSeconds / currentFrame;
+                const framesRemaining = totalFrames - currentFrame;
+                const secondsRemaining = framesRemaining * avgSecondsPerFrame;
+                lastDisplayedEta = secondsRemaining;
+                return secondsRemaining;
             }
 
-            const framesPerSecond = framesDone / timeTaken;
-            const framesRemaining = totalFrames - currentFrame;
-            const secondsRemaining = framesRemaining / framesPerSecond;
-
-            return secondsRemaining;
+            return lastDisplayedEta;
         }
 
         function formatETA(seconds) {
@@ -619,20 +1130,32 @@
             if (totalFrames > 0 && currentFrame > 0) {
                 frameCounter.textContent = `Frame ${currentFrame} / ${totalFrames}`;
 
-                // Calculate and display ETA during OCR phase (15-85%)
-                if (progress >= 15 && progress < 85) {
-                    if (!ocrStartTime) {
-                        ocrStartTime = Date.now();
-                        frameTimestamps = [];
-                    }
+                // Start ETA tracking when OCR begins (progress >= 15%)
+                if (progress >= 15 && !ocrStartTime) {
+                    ocrStartTime = Date.now();
+                    smoothedSecondsPerFrame = null;
+                    lastFrameCount = 0;
+                    lastEtaUpdate = 0;
+                    lastDisplayedEta = null;
+                }
+
+                // Always show ETA once we have it (during and after OCR phase)
+                if (ocrStartTime && progress < 100) {
                     const eta = calculateETA(currentFrame, totalFrames);
-                    etaDisplay.textContent = formatETA(eta);
-                } else {
-                    etaDisplay.textContent = '';
+                    const etaText = formatETA(eta);
+                    if (etaText) {
+                        etaDisplay.textContent = etaText;
+                    }
+                    // Keep showing last ETA even if current calculation returns empty
+                } else if (progress >= 100) {
+                    etaDisplay.textContent = 'Complete!';
                 }
             } else {
                 frameCounter.textContent = '';
-                etaDisplay.textContent = '';
+                // Don't clear ETA if we have a valid one being displayed
+                if (progress < 15) {
+                    etaDisplay.textContent = 'Calculating...';
+                }
             }
 
             // Determine phase based on progress
@@ -651,10 +1174,8 @@
                 let modeHtml = '';
                 if (processingModeInfo.gpu) {
                     modeHtml = '<span class="mode-badge gpu">🚀 GPU Accelerated</span>';
-                } else if (processingModeInfo.parallel) {
-                    modeHtml = `<span class="mode-badge parallel">⚡ Parallel (${processingModeInfo.workers} workers)</span>`;
                 } else {
-                    modeHtml = '<span class="mode-badge sequential">🔄 Sequential CPU</span>';
+                    modeHtml = '<span class="mode-badge sequential">💻 CPU Mode</span>';
                 }
                 processingMode.innerHTML = modeHtml;
             }
@@ -702,7 +1223,10 @@
 
             // Reset ETA tracking
             ocrStartTime = null;
-            frameTimestamps = [];
+            smoothedSecondsPerFrame = null;
+            lastFrameCount = 0;
+            lastEtaUpdate = 0;
+            lastDisplayedEta = null;
 
             // Reset progress display
             updateProgress(0, 'Uploading video...', 0, 0, null);
@@ -818,6 +1342,449 @@
             if (!currentJobId) return;
             window.location.href = `/api/download/${currentJobId}/${format}`;
         }
+
+        // ==================== Tab Navigation ====================
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + 'Tab').classList.add('active');
+
+            // Refresh queue status when switching to queue tab
+            if (tabName === 'queue') {
+                refreshQueueStatus();
+            }
+        }
+
+        // ==================== Queue Functionality ====================
+
+        const queueUploadZone = document.getElementById('queueUploadZone');
+        const queueFileInput = document.getElementById('queueFileInput');
+        const queueList = document.getElementById('queueList');
+        const queueProgress = document.getElementById('queueProgress');
+        const queueProgressText = document.getElementById('queueProgressText');
+        const queueProgressFill = document.getElementById('queueProgressFill');
+        const queueItemProgressPct = document.getElementById('queueItemProgressPct');
+        const queueItemProgressFill = document.getElementById('queueItemProgressFill');
+        const queueItemFrameCounter = document.getElementById('queueItemFrameCounter');
+        const queueItemPhase = document.getElementById('queueItemPhase');
+        const queueItemEta = document.getElementById('queueItemEta');
+        const queueOverallCount = document.getElementById('queueOverallCount');
+        const processQueueBtn = document.getElementById('processQueueBtn');
+        const clearQueueBtn = document.getElementById('clearQueueBtn');
+        const queueErrorMsg = document.getElementById('queueErrorMsg');
+
+        let queueItems = [];
+        let isProcessingQueue = false;
+
+        // Queue ETA tracking
+        let queueOcrStartTime = null;
+        let queueLastFrameCount = 0;
+        let queueSmoothedSecondsPerFrame = null;
+        let queueLastEtaUpdate = 0;
+        let queueLastDisplayedEta = null;
+
+        // Queue upload handlers
+        queueUploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            queueUploadZone.classList.add('dragover');
+        });
+
+        queueUploadZone.addEventListener('dragleave', () => {
+            queueUploadZone.classList.remove('dragover');
+        });
+
+        queueUploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            queueUploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                addFilesToQueue(e.dataTransfer.files);
+            }
+        });
+
+        queueUploadZone.addEventListener('click', () => {
+            queueFileInput.click();
+        });
+
+        queueFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                addFilesToQueue(e.target.files);
+            }
+        });
+
+        async function addFilesToQueue(files) {
+            const engine = document.getElementById('queueEngine').value;
+            const fps = document.getElementById('queueFps').value;
+            const language = document.getElementById('queueLanguage').value;
+
+            // Debug: log selected settings
+            console.log(`[Queue] Adding ${files.length} file(s) with settings: engine=${engine}, fps=${fps}, language=${language}`);
+
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('video', file);
+                formData.append('engine', engine);
+                formData.append('fps', fps);
+                formData.append('language', language);
+
+                // Debug: verify FormData contents
+                console.log(`[Queue] Sending: ${file.name} with fps=${fps}`);
+
+                try {
+                    const response = await fetch('/api/queue/add', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`[Queue] Added to queue: ${data.filename} (position ${data.position})`);
+                    } else {
+                        const error = await response.json();
+                        console.error(`[Queue] Failed to add ${file.name}: ${error.error}`);
+                    }
+                } catch (e) {
+                    console.error(`[Queue] Error adding ${file.name}:`, e);
+                }
+            }
+
+            // Reset file input to allow re-selecting the same files
+            document.getElementById('queueFileInput').value = '';
+
+            // Refresh queue display
+            await refreshQueueStatus();
+        }
+
+        async function refreshQueueStatus() {
+            try {
+                const response = await fetch('/api/queue/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    queueItems = data.items;
+                    isProcessingQueue = data.processing;
+                    renderQueueList();
+                    updateQueueButtons();
+                    updateDownloadAllVisibility();
+                }
+            } catch (e) {
+                console.error('Failed to refresh queue status:', e);
+            }
+        }
+
+        function renderQueueList() {
+            if (queueItems.length === 0) {
+                queueList.innerHTML = `
+                    <div class="queue-empty">
+                        No videos in queue. Add some videos above to get started.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            for (const item of queueItems) {
+                const statusClass = item.status;
+                const statusText = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+
+                let actions = '';
+                if (item.status === 'queued') {
+                    actions = `<button class="queue-btn remove" onclick="removeFromQueue('${item.queue_id}')">Remove</button>`;
+                } else if (item.status === 'complete') {
+                    actions = `
+                        <button class="queue-btn download" onclick="downloadQueueResult('${item.queue_id}', 'json')">JSON</button>
+                        <button class="queue-btn download" onclick="downloadQueueResult('${item.queue_id}', 'markdown')">MD</button>
+                        <button class="queue-btn download" onclick="downloadQueueResult('${item.queue_id}', 'text')">TXT</button>
+                    `;
+                } else if (item.status === 'error') {
+                    actions = `<span style="color: #ff5252; font-size: 0.8rem;">${item.error || 'Processing failed'}</span>`;
+                }
+
+                html += `
+                    <div class="queue-item">
+                        <div class="queue-item-info">
+                            <div class="queue-position">${item.position}</div>
+                            <div class="queue-filename">${item.filename}</div>
+                        </div>
+                        <span class="queue-status ${statusClass}">${statusText}</span>
+                        <div class="queue-actions">${actions}</div>
+                    </div>
+                `;
+            }
+
+            queueList.innerHTML = html;
+        }
+
+        function updateQueueButtons() {
+            const hasQueued = queueItems.some(item => item.status === 'queued');
+            const hasAny = queueItems.length > 0;
+
+            processQueueBtn.disabled = !hasQueued || isProcessingQueue;
+            clearQueueBtn.disabled = !hasAny || isProcessingQueue;
+
+            if (isProcessingQueue) {
+                processQueueBtn.textContent = 'Processing...';
+                queueProgress.style.display = 'block';
+            } else {
+                processQueueBtn.textContent = 'Process All Videos';
+                queueProgress.style.display = 'none';
+            }
+        }
+
+        async function removeFromQueue(queueId) {
+            try {
+                const response = await fetch(`/api/queue/remove/${queueId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await refreshQueueStatus();
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to remove: ${error.error}`);
+                }
+            } catch (e) {
+                console.error('Error removing from queue:', e);
+            }
+        }
+
+        async function clearQueue() {
+            if (!confirm('Are you sure you want to clear all queued videos?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/queue/clear', {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await refreshQueueStatus();
+                }
+            } catch (e) {
+                console.error('Error clearing queue:', e);
+            }
+        }
+
+        function calculateQueueETA(currentFrame, totalFrames) {
+            if (currentFrame <= 0 || totalFrames <= 0 || !queueOcrStartTime) {
+                return queueLastDisplayedEta;
+            }
+
+            const now = Date.now();
+
+            if (queueLastFrameCount > 0 && currentFrame > queueLastFrameCount && queueLastEtaUpdate > 0) {
+                const framesDelta = currentFrame - queueLastFrameCount;
+                const timeDelta = (now - queueLastEtaUpdate) / 1000;
+
+                if (timeDelta > 0 && framesDelta > 0) {
+                    const instantSecondsPerFrame = timeDelta / framesDelta;
+                    const alpha = 0.1;
+                    if (queueSmoothedSecondsPerFrame === null) {
+                        queueSmoothedSecondsPerFrame = instantSecondsPerFrame;
+                    } else {
+                        queueSmoothedSecondsPerFrame = alpha * instantSecondsPerFrame + (1 - alpha) * queueSmoothedSecondsPerFrame;
+                    }
+                }
+            }
+
+            queueLastFrameCount = currentFrame;
+            queueLastEtaUpdate = now;
+
+            if (queueSmoothedSecondsPerFrame !== null && queueSmoothedSecondsPerFrame > 0) {
+                const framesRemaining = totalFrames - currentFrame;
+                const secondsRemaining = framesRemaining * queueSmoothedSecondsPerFrame;
+                queueLastDisplayedEta = secondsRemaining;
+                return secondsRemaining;
+            }
+
+            const elapsedSeconds = (now - queueOcrStartTime) / 1000;
+            if (currentFrame > 0 && elapsedSeconds > 0) {
+                const avgSecondsPerFrame = elapsedSeconds / currentFrame;
+                const framesRemaining = totalFrames - currentFrame;
+                const secondsRemaining = framesRemaining * avgSecondsPerFrame;
+                queueLastDisplayedEta = secondsRemaining;
+                return secondsRemaining;
+            }
+
+            return queueLastDisplayedEta;
+        }
+
+        async function pollQueueItemProgress(queueId) {
+            try {
+                const response = await fetch(`/api/queue/item/${queueId}`);
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.progress !== undefined) {
+                        // Update item progress display
+                        queueItemProgressPct.textContent = `${data.progress}%`;
+                        queueItemProgressFill.style.width = `${data.progress}%`;
+
+                        // Frame counter
+                        if (data.total_frames > 0 && data.current_frame > 0) {
+                            queueItemFrameCounter.textContent = `Frame ${data.current_frame} / ${data.total_frames}`;
+
+                            // Start ETA tracking when OCR begins
+                            if (data.progress >= 15 && !queueOcrStartTime) {
+                                queueOcrStartTime = Date.now();
+                                queueSmoothedSecondsPerFrame = null;
+                                queueLastFrameCount = 0;
+                                queueLastEtaUpdate = 0;
+                                queueLastDisplayedEta = null;
+                            }
+
+                            // Calculate and show ETA
+                            if (queueOcrStartTime && data.progress < 100) {
+                                const eta = calculateQueueETA(data.current_frame, data.total_frames);
+                                if (eta !== null && eta > 0 && isFinite(eta)) {
+                                    queueItemEta.textContent = formatETA(eta);
+                                }
+                            } else if (data.progress >= 100) {
+                                queueItemEta.textContent = 'Complete!';
+                            }
+                        } else {
+                            queueItemFrameCounter.textContent = '';
+                            if (data.progress < 15) {
+                                queueItemEta.textContent = 'Calculating...';
+                            }
+                        }
+
+                        // Phase display
+                        let phase = '';
+                        if (data.progress < 5) phase = 'Initializing';
+                        else if (data.progress < 15) phase = 'Extracting frames';
+                        else if (data.progress < 85) phase = 'OCR processing';
+                        else if (data.progress < 90) phase = 'Deduplicating';
+                        else if (data.progress < 95) phase = 'Parsing transcript';
+                        else if (data.progress < 100) phase = 'Generating output';
+                        else phase = 'Complete';
+                        queueItemPhase.textContent = phase;
+                    }
+                }
+            } catch (e) {
+                console.error('Error polling queue item progress:', e);
+            }
+        }
+
+        async function processQueue() {
+            if (isProcessingQueue) return;
+
+            processQueueBtn.disabled = true;
+            clearQueueBtn.disabled = true;
+            queueProgress.style.display = 'block';
+            queueErrorMsg.classList.remove('active');
+
+            // Reset queue ETA tracking
+            queueOcrStartTime = null;
+            queueSmoothedSecondsPerFrame = null;
+            queueLastFrameCount = 0;
+            queueLastEtaUpdate = 0;
+            queueLastDisplayedEta = null;
+
+            // Reset progress display
+            queueItemProgressPct.textContent = '0%';
+            queueItemProgressFill.style.width = '0%';
+            queueItemFrameCounter.textContent = '';
+            queueItemPhase.textContent = '';
+            queueItemEta.textContent = 'Calculating...';
+
+            // Track which queue item we're polling for ETA reset
+            let lastProcessingQueueId = null;
+
+            // Start polling for queue updates
+            const pollInterval = setInterval(async () => {
+                await refreshQueueStatus();
+
+                // Update progress display
+                const processing = queueItems.find(item => item.status === 'processing');
+                if (processing) {
+                    queueProgressText.textContent = `Processing: ${processing.filename}`;
+
+                    // Reset ETA tracking when a NEW item starts processing
+                    if (processing.queue_id !== lastProcessingQueueId) {
+                        console.log(`[Queue] New item processing: ${processing.filename}, resetting ETA tracking`);
+                        lastProcessingQueueId = processing.queue_id;
+                        queueOcrStartTime = null;
+                        queueSmoothedSecondsPerFrame = null;
+                        queueLastFrameCount = 0;
+                        queueLastEtaUpdate = 0;
+                        queueLastDisplayedEta = null;
+                        queueItemEta.textContent = 'Calculating...';
+                    }
+
+                    // Poll detailed progress for the processing item
+                    await pollQueueItemProgress(processing.queue_id);
+                }
+
+                // Update overall queue progress
+                const completed = queueItems.filter(item => item.status === 'complete').length;
+                const errored = queueItems.filter(item => item.status === 'error').length;
+                const total = queueItems.length;
+                const overallPct = total > 0 ? Math.round(((completed + errored) / total) * 100) : 0;
+                queueProgressFill.style.width = `${overallPct}%`;
+                queueOverallCount.textContent = `${completed + errored} / ${total} videos processed`;
+
+            }, 500);  // Poll every 500ms for smoother updates
+
+            try {
+                const response = await fetch('/api/queue/process', {
+                    method: 'POST'
+                });
+
+                clearInterval(pollInterval);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    queueProgressText.textContent = `Complete! Processed ${result.processed} videos`;
+                    if (result.errors > 0) {
+                        queueProgressText.textContent += ` (${result.errors} errors)`;
+                    }
+                    queueProgressFill.style.width = '100%';
+                    queueItemProgressFill.style.width = '100%';
+                    queueItemProgressPct.textContent = '100%';
+                    queueItemEta.textContent = 'All done!';
+                    queueOverallCount.textContent = `${result.processed} videos processed`;
+                } else {
+                    const error = await response.json();
+                    queueErrorMsg.textContent = error.error;
+                    queueErrorMsg.classList.add('active');
+                }
+
+                await refreshQueueStatus();
+
+            } catch (e) {
+                clearInterval(pollInterval);
+                queueErrorMsg.textContent = e.message;
+                queueErrorMsg.classList.add('active');
+                await refreshQueueStatus();
+            }
+        }
+
+        function downloadQueueResult(queueId, format) {
+            window.location.href = `/api/queue/download/${queueId}/${format}`;
+        }
+
+        function downloadAllResults(format) {
+            const deduplicate = document.getElementById('deduplicateCheckbox').checked;
+            window.location.href = `/api/queue/download-all/${format}?deduplicate=${deduplicate}`;
+        }
+
+        function updateDownloadAllVisibility() {
+            const downloadAllSection = document.getElementById('downloadAllSection');
+            const hasCompleted = queueItems.some(item => item.status === 'complete');
+            downloadAllSection.style.display = hasCompleted ? 'block' : 'none';
+        }
+
+        // Initial load
+        refreshQueueStatus();
     </script>
 </body>
 </html>

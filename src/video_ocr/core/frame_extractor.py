@@ -64,10 +64,12 @@ class FrameExtractor:
             skip_similar_threshold: Skip frames with similarity above this (0-1)
             max_frames: Maximum number of frames to extract
         """
-        self.fps = fps
-        self.skip_similar_threshold = skip_similar_threshold
+        # Ensure fps is a float (defensive against string values from forms)
+        self.fps = float(fps) if fps is not None else 2.0
+        self.skip_similar_threshold = float(skip_similar_threshold)
         self.max_frames = max_frames
         self.logger = get_logger()
+        self.logger.debug(f"FrameExtractor initialized with fps={self.fps} (input was {fps!r}), skip_similar_threshold={self.skip_similar_threshold}, max_frames={max_frames}")
 
     def validate_video(self, video_path: Path) -> Tuple[bool, str]:
         """
@@ -161,15 +163,34 @@ class FrameExtractor:
 
         cap = cv2.VideoCapture(str(video_path))
 
+        if not cap.isOpened():
+            raise FrameExtractionError(f"Could not open video file: {video_path}")
+
         video_fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+        if video_fps <= 0 or total_frames <= 0:
+            cap.release()
+            raise FrameExtractionError(
+                f"Invalid video properties: FPS={video_fps}, frames={total_frames}"
+            )
+
         # Calculate frame interval based on target FPS
-        frame_interval = max(1, int(video_fps / self.fps))
+        # Use round() instead of int() to handle non-standard frame rates better
+        # For example: video at 29.97 FPS, target 15 FPS -> interval should be 2, not 1
+        if self.fps >= video_fps:
+            # Target FPS is higher than or equal to video FPS, extract every frame
+            frame_interval = 1
+        else:
+            frame_interval = max(1, round(video_fps / self.fps))
+
+        # Calculate expected frames
+        expected_frames = total_frames // frame_interval
 
         self.logger.info(
-            f"Extracting frames from {video_path.name} "
-            f"(FPS: {video_fps:.1f}, target: {self.fps}, interval: {frame_interval})"
+            f"Extracting frames from {video_path.name}: "
+            f"native_fps={video_fps:.2f}, target_fps={self.fps}, interval={frame_interval}, "
+            f"total_frames={total_frames}, expected_extract=~{expected_frames}"
         )
 
         frame_number = 0
@@ -217,9 +238,16 @@ class FrameExtractor:
 
         cap.release()
 
-        self.logger.info(
-            f"Extracted {extracted_count} frames from {total_frames} total"
-        )
+        if extracted_count == 0:
+            self.logger.warning(
+                f"WARNING: No frames extracted from {video_path.name}! "
+                f"Total frames in video: {total_frames}, interval: {frame_interval}"
+            )
+        else:
+            self.logger.info(
+                f"Extracted {extracted_count} frames from {total_frames} total "
+                f"(expected ~{expected_frames})"
+            )
 
     def extract_frames_to_list(
         self,

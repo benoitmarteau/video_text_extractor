@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -124,6 +124,7 @@ class OutputFormatter:
         self,
         transcript: ParsedTranscript,
         metadata: ExtractionMetadata,
+        raw_text: str = "",
     ) -> str:
         """
         Format results as Markdown.
@@ -131,6 +132,7 @@ class OutputFormatter:
         Args:
             transcript: Parsed transcript
             metadata: Extraction metadata
+            raw_text: Raw extracted text (fallback when no structured transcript)
 
         Returns:
             Markdown string
@@ -149,9 +151,9 @@ class OutputFormatter:
             lines.append(f"**OCR Engine**: {metadata.ocr_engine}")
             lines.append("")
 
-        # Statistics
+        # Statistics - use raw_text for word count if no entries
         if self.include_statistics:
-            stats = self._calculate_statistics(transcript, "")
+            stats = self._calculate_statistics(transcript, raw_text)
             lines.append("## Summary")
             lines.append("")
             lines.append(f"- **Speakers**: {stats.total_speakers}")
@@ -163,17 +165,31 @@ class OutputFormatter:
         lines.append("---")
         lines.append("")
 
-        # Transcript
-        lines.append("## Transcript")
-        lines.append("")
+        # Transcript or Raw Text fallback
+        if transcript.entries:
+            lines.append("## Transcript")
+            lines.append("")
 
-        for entry in transcript.entries:
-            if entry.speaker:
-                lines.append(f"**{entry.speaker}** ({entry.timestamp})")
-            else:
-                lines.append(f"*({entry.timestamp})*")
+            for entry in transcript.entries:
+                if entry.speaker:
+                    lines.append(f"**{entry.speaker}** ({entry.timestamp})")
+                else:
+                    lines.append(f"*({entry.timestamp})*")
 
-            lines.append(entry.text)
+                lines.append(entry.text)
+                lines.append("")
+        elif raw_text and raw_text.strip():
+            # Fallback: show raw OCR text when no structured transcript found
+            lines.append("## Extracted Text")
+            lines.append("")
+            lines.append("*No structured transcript format detected (Zoom/Teams). Showing raw OCR text:*")
+            lines.append("")
+            lines.append(raw_text.strip())
+            lines.append("")
+        else:
+            lines.append("## Transcript")
+            lines.append("")
+            lines.append("*No text content found in video.*")
             lines.append("")
 
         # Footer
@@ -187,6 +203,7 @@ class OutputFormatter:
         self,
         transcript: ParsedTranscript,
         metadata: Optional[ExtractionMetadata] = None,
+        raw_text: str = "",
     ) -> str:
         """
         Format results as plain text.
@@ -194,6 +211,7 @@ class OutputFormatter:
         Args:
             transcript: Parsed transcript
             metadata: Optional extraction metadata
+            raw_text: Raw extracted text (fallback when no structured transcript)
 
         Returns:
             Plain text string
@@ -208,14 +226,24 @@ class OutputFormatter:
             lines.append("-" * 50)
             lines.append("")
 
-        # Transcript entries
-        for entry in transcript.entries:
-            if entry.speaker:
-                lines.append(f"[{entry.timestamp}] {entry.speaker}:")
-            else:
-                lines.append(f"[{entry.timestamp}]")
+        # Transcript entries or raw text fallback
+        if transcript.entries:
+            for entry in transcript.entries:
+                if entry.speaker:
+                    lines.append(f"[{entry.timestamp}] {entry.speaker}:")
+                else:
+                    lines.append(f"[{entry.timestamp}]")
 
-            lines.append(f"  {entry.text}")
+                lines.append(f"  {entry.text}")
+                lines.append("")
+        elif raw_text and raw_text.strip():
+            # Fallback: show raw OCR text when no structured transcript found
+            lines.append("(No structured transcript format detected. Raw OCR text below)")
+            lines.append("")
+            lines.append(raw_text.strip())
+            lines.append("")
+        else:
+            lines.append("(No text content found in video)")
             lines.append("")
 
         return "\n".join(lines)
@@ -292,15 +320,15 @@ class OutputFormatter:
         json_path.write_text(json_content, encoding="utf-8")
         saved_files["json"] = json_path
 
-        # Markdown
+        # Markdown - pass raw_text for fallback when no transcript entries
         md_path = output_dir / f"{base_name}.md"
-        md_content = self.format_markdown(transcript, metadata)
+        md_content = self.format_markdown(transcript, metadata, raw_text)
         md_path.write_text(md_content, encoding="utf-8")
         saved_files["markdown"] = md_path
 
-        # Plain text
+        # Plain text - pass raw_text for fallback when no transcript entries
         txt_path = output_dir / f"{base_name}.txt"
-        txt_content = self.format_text(transcript, metadata)
+        txt_content = self.format_text(transcript, metadata, raw_text)
         txt_path.write_text(txt_content, encoding="utf-8")
         saved_files["text"] = txt_path
 
@@ -377,7 +405,7 @@ def create_metadata(
         duration_seconds=duration_seconds,
         frames_processed=frames_processed,
         frames_with_text=frames_with_text,
-        extraction_timestamp=datetime.utcnow().isoformat() + "Z",
+        extraction_timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         ocr_engine=ocr_engine,
         confidence_threshold=confidence_threshold,
     )
