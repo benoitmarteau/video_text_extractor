@@ -139,11 +139,15 @@ video-ocr engines
 ### Web Interface
 
 ```bash
-# Start the web server
+# Start the web server (default: http://localhost:8080)
 python -m video_ocr.web.app
 
-# Opens at http://localhost:8080
+# Or from Python:
+from video_ocr.web.app import run_server
+run_server(host="0.0.0.0", port=8080, debug=False)
 ```
+
+**Note:** Ensure Flask is installed (`pip install -e ".[web]"` or `pip install flask flask-cors`).
 
 The web interface provides:
 - **Single Video Mode**:
@@ -465,6 +469,28 @@ Make sure PyTorch is installed with CUDA support:
 ```bash
 python -c "import torch; print(torch.cuda.is_available())"
 ```
+
+### Web server won't start
+
+If the web server fails to start:
+
+1. **Flask not installed**: Install web dependencies:
+   ```bash
+   pip install -e ".[web]"
+   # Or manually:
+   pip install flask flask-cors
+   ```
+
+2. **Port already in use**: The default port is 8080. If it's in use, modify the call:
+   ```python
+   from video_ocr.web.app import run_server
+   run_server(port=8081)  # Use a different port
+   ```
+
+3. **Import errors**: Ensure the package is installed in development mode:
+   ```bash
+   pip install -e .
+   ```
 
 ## License
 

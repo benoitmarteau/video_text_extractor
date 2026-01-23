@@ -127,6 +127,19 @@ Video → Frame Extraction → OCR → Deduplication → Transcript Parsing → 
 | CLI | `cli.py` | Click + Rich | Commands: extract, batch, info, engines |
 | Web | `web/app.py` | Flask | Single video + queue mode with progress |
 
+### Starting the Web Server
+
+```bash
+# Start the web server (default: http://localhost:8080)
+python -m video_ocr.web.app
+
+# Or programmatically:
+from video_ocr.web.app import run_server
+run_server(host="0.0.0.0", port=8080, debug=False)
+```
+
+**Requirements:** Flask must be installed (`pip install -e ".[web]"`).
+
 ## Key Technical Decisions
 
 1. **OCR Engine Selection**

@@ -82,9 +82,9 @@ all = [
 video-ocr = "video_ocr.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/video-ocr/video-ocr-transcript-extractor"
-Documentation = "https://github.com/video-ocr/video-ocr-transcript-extractor#readme"
-Repository = "https://github.com/video-ocr/video-ocr-transcript-extractor"
+Homepage = "https://github.com/benoitmarteau/video_text_extractor"
+Documentation = "https://github.com/benoitmarteau/video_text_extractor#readme"
+Repository = "https://github.com/benoitmarteau/video_text_extractor"
 
 [tool.setuptools.packages.find]
 where = ["src"]
